@@ -2906,7 +2906,7 @@ export default function App() {
                 {/* Hero Showcase Display Image */}
                 <div className="lg:col-span-2 relative min-h-[300px] bg-gray-950 overflow-hidden select-none">
                   <img
-                    src={featuredProduct.imageUrl}
+                    src={featuredProduct.imageUrl || null}
                     alt={featuredProduct.title}
                     className="w-full h-full object-cover opacity-85 hover:scale-105 transition-all duration-700"
                     referrerPolicy="no-referrer"
@@ -2943,7 +2943,7 @@ export default function App() {
                       {/* Image cover header with badges overlay */}
                       <div className="relative h-44 bg-gray-950 overflow-hidden select-none">
                         <img
-                          src={p.imageUrl}
+                          src={p.imageUrl || null}
                           alt={p.title}
                           className="w-full h-full object-cover group-hover:scale-110 transition-all duration-500 opacity-80"
                           referrerPolicy="no-referrer"
@@ -3999,7 +3999,7 @@ function doPost(e) {
             {/* Header Image cover */}
             <div className="relative h-48 select-none bg-gray-950">
               <img
-                src={selectedProduct.imageUrl}
+                src={selectedProduct.imageUrl || null}
                 alt={selectedProduct.title}
                 className="w-full h-full object-cover opacity-80"
                 referrerPolicy="no-referrer"
