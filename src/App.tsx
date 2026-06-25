@@ -1879,7 +1879,7 @@ export default function App() {
     const viewsIdx = findHeaderIndex(headers, ['views', 'view_count', 'view', 'viewcount', 'view count', 'views count', 'views_count', 'วิว', 'ยอดวิว', 'คนดู']);
     const downloadsIdx = findHeaderIndex(headers, ['downloads', 'download_count', 'downloadcount', 'download count', 'downloads count', 'downloads_count', 'ดาวน์โหลด', 'ยอดดาวน์โหลด', 'คนโหลด', 'จำนวนดาวน์โหลด']);
     const sizeIdx = findHeaderIndex(headers, ['size', 'file_size', 'filesize', 'file size', 'ขนาด', 'ขนาดไฟล์', 'ความจุ']);
-    const lUrlIdx = findHeaderIndex(headers, ['imageurl', 'image_url', 'image url', 'screenshot', 'url รูป', 'รูปภาพ', 'ลิงก์รูป', 'รูปภาพประกอบ', 'ภาพ', 'ลิงก์ภาพ']);
+    const lUrlIdx = findHeaderIndex(headers, ['imageurl', 'image_url', 'image url', 'screenshot', 'url รูป', 'รูปภาพ', 'ลิงก์รูป', 'รูปภาพประกอบ', 'ภาพ', 'ลิงก์ภาพ', 'bannerimage', 'banner_image', 'banner image', 'banner']);
     const dUrlIdx = findHeaderIndex(headers, ['downloadurl', 'download_url', 'download url', 'link', 'ลิงก์ดาวน์โหลด', 'ดาวน์โหลด', 'ลิงก์โหลด', 'ลิงก์', 'โหลด']);
     const rIdx = findHeaderIndex(headers, ['rating', 'score', 'star', 'stars', 'คะแนน', 'เรตติ้ง']);
 
@@ -2955,14 +2955,21 @@ export default function App() {
 
                 {/* Hero Showcase Display Image */}
                 <div className="lg:col-span-2 relative min-h-[300px] bg-gray-950 overflow-hidden select-none">
-                  <img
-                    src={featuredProduct.imageUrl || null}
-                    alt={featuredProduct.title}
-                    className="w-full h-full object-cover opacity-85 hover:scale-105 transition-all duration-700"
-                    referrerPolicy="no-referrer"
-                    data-original-drive-id={getGoogleDriveId(featuredProduct.imageUrl || '') || undefined}
-                    onError={handleImageError}
-                  />
+                  {featuredProduct.isHtmlImage && featuredProduct.htmlImage ? (
+                    <div 
+                      className="w-full h-full [&>img]:w-full [&>img]:h-full [&>img]:object-cover opacity-85 hover:scale-105 transition-all duration-700"
+                      dangerouslySetInnerHTML={{ __html: featuredProduct.htmlImage }}
+                    />
+                  ) : (
+                    <img
+                      src={featuredProduct.imageUrl || null}
+                      alt={featuredProduct.title}
+                      className="w-full h-full object-cover opacity-85 hover:scale-105 transition-all duration-700"
+                      referrerPolicy="no-referrer"
+                      data-original-drive-id={getGoogleDriveId(featuredProduct.imageUrl || '') || undefined}
+                      onError={handleImageError}
+                    />
+                  )}
                   <div className="absolute inset-0 bg-gradient-to-t from-[#121829] via-[#121829]/30 to-transparent pointer-events-none" />
                   <div className="absolute inset-0 bg-gradient-to-r from-[#121829] via-transparent to-transparent pointer-events-none" />
                   
@@ -2993,14 +3000,21 @@ export default function App() {
                     >
                       {/* Image cover header with badges overlay */}
                       <div className="relative h-44 bg-gray-950 overflow-hidden select-none">
-                        <img
-                          src={p.imageUrl || null}
-                          alt={p.title}
-                          className="w-full h-full object-cover group-hover:scale-110 transition-all duration-500 opacity-80"
-                          referrerPolicy="no-referrer"
-                          data-original-drive-id={getGoogleDriveId(p.imageUrl || '') || undefined}
-                          onError={handleImageError}
-                        />
+                        {p.isHtmlImage && p.htmlImage ? (
+                          <div 
+                            className="w-full h-full [&>img]:w-full [&>img]:h-full [&>img]:object-cover group-hover:scale-110 transition-all duration-500 opacity-80"
+                            dangerouslySetInnerHTML={{ __html: p.htmlImage }}
+                          />
+                        ) : (
+                          <img
+                            src={p.imageUrl || null}
+                            alt={p.title}
+                            className="w-full h-full object-cover group-hover:scale-110 transition-all duration-500 opacity-80"
+                            referrerPolicy="no-referrer"
+                            data-original-drive-id={getGoogleDriveId(p.imageUrl || '') || undefined}
+                            onError={handleImageError}
+                          />
+                        )}
                         <div className="absolute inset-0 bg-gradient-to-t from-[#0b101c] via-[#0b101c]/40 to-transparent" />
                         
                         {/* Tags */}
