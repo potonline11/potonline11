@@ -4795,7 +4795,6 @@ function VercelBlobUploader() {
   const [uploading, setUploading] = useState(false);
   const [blobUrl, setBlobUrl] = useState('');
 const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-
     const file = e.target.files?.[0];
     if (!file) return;
 
