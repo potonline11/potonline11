@@ -181,12 +181,13 @@ async function startServer() {
         console.warn(`uc proxy failed for ID ${id}:`, e);
       }
 
-      // If all proxy methods fail, redirect as an absolute last resort
-      console.error(`All proxy methods failed to fetch Google Drive image ${id}. Redirecting client directly...`);
-      res.redirect(`https://drive.google.com/thumbnail?id=${id}&sz=w1600`);
+      // If all proxy methods fail, redirect to the highly reliable wsrv.nl CDN proxy
+      // This strips Referer headers and handles CDN caching, bypassing any 403 blocks on potnuengshop.com
+      console.error(`All proxy methods failed to fetch Google Drive image ${id}. Redirecting to wsrv.nl...`);
+      res.redirect(`https://wsrv.nl/?url=${encodeURIComponent(`https://lh3.googleusercontent.com/d/${id}`)}`);
     } catch (error) {
       console.error('Fatal error proxying Google Drive image:', error);
-      res.redirect(`https://drive.google.com/thumbnail?id=${req.query.id}&sz=w1600`);
+      res.redirect(`https://wsrv.nl/?url=${encodeURIComponent(`https://lh3.googleusercontent.com/d/${req.query.id}`)}`);
     }
   });
 

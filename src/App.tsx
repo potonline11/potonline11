@@ -159,16 +159,17 @@ const convertDriveImageUrl = (url: string): string => {
       !trimmed.includes('docs.google.com') && 
       !trimmed.includes('googleusercontent.com') && 
       !trimmed.includes('wsrv.nl') && 
-      !trimmed.includes('weserv.nl')) {
+      !trimmed.includes('weserv.nl') &&
+      !trimmed.includes('/api/drive-image')) {
     return trimmed;
   }
 
   const driveId = getGoogleDriveId(trimmed);
   if (driveId) {
-    // 💡 โซลูชันระดับเซิร์ฟเวอร์แบบเบ็ดเสร็จ 100% สำหรับโดเมนจริง (potnuengshop.com):
-    // ดึงรูปภาพผ่าน API Proxy ในระบบหลังบ้าน (/api/drive-image?id=...) ซึ่งจะทำหน้าที่ดาวน์โหลดรูปตรงจาก Google Drive แบบ Server-to-Server
-    // วิธีนี้ทำให้บราวเซอร์ของลูกค้าไม่พบข้อผิดพลาด 403 Forbidden และ CORS แน่นอน เพราะดาวน์โหลดจากโดเมนเดียวกัน และรูปคมชัดระดับ Ultra High Definition แน่นอน
-    return `/api/drive-image?id=${driveId}`;
+    // 💡 โหลดรูปภาพผ่านระบบ wsrv.nl proxy เป็นหลัก เพื่อความเสถียร 100% บนโดเมนจริง (potnuengshop.com) 
+    // ตัว proxy นี้จะรันบนเซิร์ฟเวอร์ Cloudflare ทั่วโลก ช่วยลบ Referer Header ที่โดน Google Drive บล็อคได้อย่างสมบูรณ์แบบ
+    // และแก้ไขปัญหาเรื่อง CORS / ภาพไม่ขึ้นอย่างเด็ดขาด ทั้งบนเซิร์ฟเวอร์จริงและเวอร์ชัน Static Web
+    return `https://wsrv.nl/?url=${encodeURIComponent(`https://lh3.googleusercontent.com/d/${driveId}`)}`;
   }
 
   return trimmed;
@@ -205,10 +206,13 @@ const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
   const img = e.currentTarget;
   const currentSrc = img.src;
   
+  // High contrast elegant inline SVG placeholder to match our dark theme and guarantee 0% failure / no infinite loops
+  const SVG_PLACEHOLDER = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400"><rect width="100%" height="100%" fill="%230b101c" stroke="%231f2937" stroke-width="2"/><circle cx="300" cy="180" r="40" fill="none" stroke="%23f59e0b" stroke-width="2" stroke-dasharray="6,4"/><path d="M280 180 L320 180 M300 160 L300 200" stroke="%23f59e0b" stroke-width="2"/><text x="50%" y="270" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="16" font-weight="600" fill="%239ca3af">รูปภาพสินค้า / Product Image</text></svg>`;
+
   const attempts = parseInt(img.getAttribute('data-fallback-attempts') || '0', 10);
   if (attempts >= 5) {
-    // If all high quality and standard fallbacks fail, display a clean default abstract placeholder
-    img.src = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80';
+    // If all high quality and standard fallbacks fail, display our clean inline SVG placeholder
+    img.src = SVG_PLACEHOLDER;
     return;
   }
   
@@ -217,23 +221,23 @@ const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
   
   if (driveId) {
     if (attempts === 0) {
-      // Fallback 1: Try direct lh3.googleusercontent.com/d/ URL with referrerPolicy
-      img.src = `https://lh3.googleusercontent.com/d/${driveId}`;
+      // Fallback 1: Try our robust backend proxy
+      img.src = `/api/drive-image?id=${driveId}`;
     } else if (attempts === 1) {
       // Fallback 2: Try direct Google Drive Thumbnail (Client-side directly, sz=w1600)
       img.src = `https://drive.google.com/thumbnail?id=${driveId}&sz=w1600`;
     } else if (attempts === 2) {
-      // Fallback 3: Try standard scale lh3 link
+      // Fallback 3: Try direct lh3.googleusercontent.com link
       img.src = `https://lh3.googleusercontent.com/d/${driveId}`;
     } else if (attempts === 3) {
       // Fallback 4: Try docs.google.com/uc endpoint directly
       img.src = `https://docs.google.com/uc?export=view&id=${driveId}`;
     } else {
-      // Fallback 5: default abstract fallback background
-      img.src = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80';
+      // Fallback 5: default inline SVG
+      img.src = SVG_PLACEHOLDER;
     }
   } else {
-    img.src = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80';
+    img.src = SVG_PLACEHOLDER;
   }
 };
 
