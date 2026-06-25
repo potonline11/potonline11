@@ -106,29 +106,6 @@ async function startServer() {
       res.status(500).json({ error: String(error) });
     }
   });
-// API สำหรับสร้างรหัสผ่านชั่วคราวให้หน้าบ้านส่งรูปเข้าคลังได้โดยตรงและปลอดภัย
-app.post('/api/upload', async (req, res) => {
-  try {
-    const jsonResponse = await handleUpload({
-      body: req.body,
-      request: req,
-      onBeforeGenerateToken: async (pathname) => {
-        return {
-          allowedContentTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
-          maximumSizeInBytes: 10 * 1024 * 1024, // จำกัดขนาดภาพไม่เกิน 10MB
-        };
-      },
-      onUploadCompleted: async ({ blob, tokenPayload }) => {
-        console.log('อัปโหลดไฟล์สำเร็จ:', blob.url);
-      },
-    });
-
-    return res.json(jsonResponse);
-  } catch (error: any) {
-    return res.status(400).json({ error: error.message });
-  }
-});
-
   
   // API Route to proxy Google Drive images server-side to avoid cross-origin cookie / block issues
   app.get('/api/drive-image', async (req, res) => {
