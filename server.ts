@@ -5,6 +5,7 @@ import fs from 'fs';
 import JSZip from 'jszip';
 import { createServer as createViteServer } from 'vite';
 import { fileURLToPath } from 'url';
+import { put } from '@vercel/blob';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -104,7 +105,28 @@ async function startServer() {
       res.status(500).json({ error: String(error) });
     }
   });
+// Vercel Blob API Endpoint สำหรับรับรูปภาพและอัปโหลดขึ้นคลาวด์อัตโนมัติ
+app.post('/api/upload', express.raw({ type: 'image/*', limit: '10mb' }), async (req, res) => {
+  try {
+    const filename = (req.query.filename as string) || 'image.png';
+    const fileData = req.body;
 
+    if (!fileData || Object.keys(fileData).length === 0) {
+      return res.status(400).json({ error: 'ไม่พบข้อมูลไฟล์ที่ส่งมา หรือไฟล์มีขนาดใหญ่เกินไป' });
+    }
+
+    // เรียกฟังก์ชันจาก @vercel/blob เพื่อนำรูปขึ้นคลาวด์
+    const blob = await put(filename, fileData, {
+      access: 'public',
+    });
+
+    // ส่ง URL สีฟ้ากลับไปให้หน้าบ้านคัดลอกใส่ Google Sheets
+    return res.json(blob);
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+  
   // API Route to proxy Google Drive images server-side to avoid cross-origin cookie / block issues
   app.get('/api/drive-image', async (req, res) => {
     const { id } = req.query;
