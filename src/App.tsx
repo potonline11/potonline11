@@ -166,9 +166,24 @@ const convertDriveImageUrl = (url: string): string => {
 
   const driveId = getGoogleDriveId(trimmed);
   if (driveId) {
-    // 💡 ใช้เซิร์ฟเวอร์ proxy ส่วนตัวของเราเอง (/api/drive-image?id=...) เป็นหลัก
-    // วิธีนี้เสถียรที่สุด 100% เพราะดึงผ่าน IP ของ Google Cloud (Cloud Run) ทำให้ไม่มีวันติดบล็อก Referer 403 และแสดงผลภาพด้วยความละเอียดสูงสุดอย่างเสถียร
-    return `/api/drive-image?id=${driveId}`;
+    // 💡 เช็คว่าเราอยู่บน Preview Environment (Cloud Run) หรือบนโดเมนจริงของคุณลูกค้า (Vercel)
+    // หากอยู่บน Cloud Run เราดึงผ่าน /api/drive-image (Node Proxy) ได้อย่างรวดเร็ว
+    // แต่หากอยู่บน Vercel (ซึ่งมีแต่หน้าเว็บ Static ไม่มีเซิร์ฟเวอร์ Node รัน backend) เราจะยิงตรงไปยัง Google CDN 100% เลยโดยตัด Referer ออก ทำให้รูปโหลดติดทันที ไร้ปัญหากวนใจ
+    const isLocalOrPreview = typeof window !== 'undefined' && (
+      window.location.hostname.includes('localhost') || 
+      window.location.hostname.includes('127.0.0.1') ||
+      window.location.hostname.includes('run.app') ||
+      window.location.hostname.includes('aistudio')
+    );
+
+    if (isLocalOrPreview) {
+      return `/api/drive-image?id=${driveId}`;
+    } else {
+      // 💡 โหลดรูปภาพความละเอียดดั้งเดิมจาก Google User Content CDN (lh3.googleusercontent.com) โดยตรง 
+      // เมื่อใช้ร่วมกับ <meta name="referrer" content="no-referrer" /> และ prop referrerPolicy="no-referrer" บนแท็ก img 
+      // เบราว์เซอร์จะไม่ส่งข้อมูล Referer ไปที่ Google ทำให้ภาพโหลดขึ้นทันที ไม่มีวันติดบล็อก 403 Forbidden และไม่ต้องการ Proxy ภายนอกเลยครับ!
+      return `https://lh3.googleusercontent.com/d/${driveId}=s0`;
+    }
   }
 
   return trimmed;
@@ -205,12 +220,12 @@ const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
   const img = e.currentTarget;
   const currentSrc = img.src;
   
-  // High contrast elegant inline SVG placeholder to match our dark theme and guarantee 0% failure / no infinite loops
-  const SVG_PLACEHOLDER = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400"><rect width="100%" height="100%" fill="%230b101c" stroke="%231f2937" stroke-width="2"/><circle cx="300" cy="180" r="40" fill="none" stroke="%23f59e0b" stroke-width="2" stroke-dasharray="6,4"/><path d="M280 180 L320 180 M300 160 L300 200" stroke="%23f59e0b" stroke-width="2"/><text x="50%" y="270" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="16" font-weight="600" fill="%239ca3af">รูปภาพสินค้า / Product Image</text></svg>`;
+  // สร้าง SVG Placeholder แบบเข้ารหัส Base64 เพื่อให้มั่นใจได้ว่าเบราว์เซอร์จะแสดงผลได้สมบูรณ์แบบ 100% โดยไม่ติดเรื่องรูปแบบอักขระพิเศษ
+  const svgString = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400"><rect width="100%" height="100%" fill="#0b101c" stroke="#1f2937" stroke-width="2"/><circle cx="300" cy="180" r="40" fill="none" stroke="#f59e0b" stroke-width="2" stroke-dasharray="6,4"/><path d="M280 180 L320 180 M300 160 L300 200" stroke="#f59e0b" stroke-width="2"/><text x="50%" y="270" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="16" font-weight="600" fill="#9ca3af">รูปภาพสินค้า / Product Image</text></svg>`;
+  const SVG_PLACEHOLDER = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svgString)))}`;
 
   const attempts = parseInt(img.getAttribute('data-fallback-attempts') || '0', 10);
   if (attempts >= 6) {
-    // If all high quality and standard fallbacks fail, display our clean inline SVG placeholder
     img.src = SVG_PLACEHOLDER;
     return;
   }
@@ -219,25 +234,43 @@ const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
   const driveId = img.getAttribute('data-original-drive-id') || getGoogleDriveId(currentSrc);
   
   if (driveId) {
-    if (attempts === 0) {
-      // Fallback 1: Try wsrv.nl proxy on raw lh3 endpoint with s0 (original size)
-      img.src = `https://wsrv.nl/?url=${encodeURIComponent(`https://lh3.googleusercontent.com/d/${driveId}=s0`)}`;
-    } else if (attempts === 1) {
-      // Fallback 2: Try Google OpenSocial Proxy on high quality thumbnail
-      const rawTarget = `https://drive.google.com/thumbnail?id=${driveId}&sz=w1600`;
-      img.src = `https://images1-focus-opensocial.googleusercontent.com/gadgets/proxy?container=focus&refresh=2592000&url=${encodeURIComponent(rawTarget)}`;
-    } else if (attempts === 2) {
-      // Fallback 3: Try wsrv.nl proxy on raw Google Drive thumbnail with default width
-      img.src = `https://wsrv.nl/?url=${encodeURIComponent(`https://drive.google.com/thumbnail?id=${driveId}`)}`;
-    } else if (attempts === 3) {
-      // Fallback 4: Try docs.google.com/uc endpoint directly
-      img.src = `https://docs.google.com/uc?export=view&id=${driveId}`;
-    } else if (attempts === 4) {
-      // Fallback 5: Try direct lh3 endpoint
-      img.src = `https://lh3.googleusercontent.com/d/${driveId}=s0`;
+    const isLocalOrPreview = typeof window !== 'undefined' && (
+      window.location.hostname.includes('localhost') || 
+      window.location.hostname.includes('127.0.0.1') ||
+      window.location.hostname.includes('run.app') ||
+      window.location.hostname.includes('aistudio')
+    );
+
+    if (isLocalOrPreview) {
+      // สำหรับการรันบนระบบทดสอบ (Cloud Run / Local)
+      if (attempts === 0) {
+        img.src = `https://lh3.googleusercontent.com/d/${driveId}=s0`;
+      } else if (attempts === 1) {
+        img.src = `https://drive.google.com/thumbnail?id=${driveId}&sz=w1600`;
+      } else if (attempts === 2) {
+        img.src = `https://images1-focus-opensocial.googleusercontent.com/gadgets/proxy?container=focus&refresh=2592000&url=${encodeURIComponent(`https://drive.google.com/thumbnail?id=${driveId}&sz=w1600`)}`;
+      } else if (attempts === 3) {
+        img.src = `https://wsrv.nl/?url=${encodeURIComponent(`https://lh3.googleusercontent.com/d/${driveId}=s0`)}`;
+      } else if (attempts === 4) {
+        img.src = `https://docs.google.com/uc?export=view&id=${driveId}`;
+      } else {
+        img.src = SVG_PLACEHOLDER;
+      }
     } else {
-      // Fallback 6: default inline SVG
-      img.src = SVG_PLACEHOLDER;
+      // สำหรับการรันบนระบบจริง (Vercel / potnuengshop.com)
+      if (attempts === 0) {
+        img.src = `https://drive.google.com/thumbnail?id=${driveId}&sz=w1600`;
+      } else if (attempts === 1) {
+        img.src = `https://images1-focus-opensocial.googleusercontent.com/gadgets/proxy?container=focus&refresh=2592000&url=${encodeURIComponent(`https://drive.google.com/thumbnail?id=${driveId}&sz=w1600`)}`;
+      } else if (attempts === 2) {
+        img.src = `https://wsrv.nl/?url=${encodeURIComponent(`https://lh3.googleusercontent.com/d/${driveId}=s0`)}`;
+      } else if (attempts === 3) {
+        img.src = `https://docs.google.com/uc?export=view&id=${driveId}`;
+      } else if (attempts === 4) {
+        img.src = `https://lh3.googleusercontent.com/d/${driveId}`; // โหลดตรงแบบย่อส่วนลงมาเผื่อติดแคลช
+      } else {
+        img.src = SVG_PLACEHOLDER;
+      }
     }
   } else {
     img.src = SVG_PLACEHOLDER;
