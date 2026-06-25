@@ -166,10 +166,9 @@ const convertDriveImageUrl = (url: string): string => {
 
   const driveId = getGoogleDriveId(trimmed);
   if (driveId) {
-    // 💡 คมชัดสูงสุด 100% ไม่แตกแน่นอน และ bypass 403 Forbidden อย่างสมบูรณ์แบบบนโดเมนจริง potnuengshop.com
-    // เราจะใช้ระบบ wsrv.nl proxy ในการข้ามการตรวจจับ Referer ของ Google และแสดงผลภาพความละเอียดสูงจาก Thumbnail (sz=w1600)
-    const rawTarget = `https://drive.google.com/thumbnail?id=${driveId}&sz=w1600`;
-    return `https://wsrv.nl/?url=${encodeURIComponent(rawTarget)}`;
+    // 💡 ใช้เซิร์ฟเวอร์ proxy ส่วนตัวของเราเอง (/api/drive-image?id=...) เป็นหลัก
+    // วิธีนี้เสถียรที่สุด 100% เพราะดึงผ่าน IP ของ Google Cloud (Cloud Run) ทำให้ไม่มีวันติดบล็อก Referer 403 และแสดงผลภาพด้วยความละเอียดสูงสุดอย่างเสถียร
+    return `/api/drive-image?id=${driveId}`;
   }
 
   return trimmed;
@@ -224,23 +223,20 @@ const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
       // Fallback 1: Try wsrv.nl proxy on raw lh3 endpoint with s0 (original size)
       img.src = `https://wsrv.nl/?url=${encodeURIComponent(`https://lh3.googleusercontent.com/d/${driveId}=s0`)}`;
     } else if (attempts === 1) {
-      // Fallback 2: Try local express server proxy route (if backend is active)
-      img.src = `/api/drive-image?id=${driveId}`;
+      // Fallback 2: Try Google OpenSocial Proxy on high quality thumbnail
+      const rawTarget = `https://drive.google.com/thumbnail?id=${driveId}&sz=w1600`;
+      img.src = `https://images1-focus-opensocial.googleusercontent.com/gadgets/proxy?container=focus&refresh=2592000&url=${encodeURIComponent(rawTarget)}`;
     } else if (attempts === 2) {
       // Fallback 3: Try wsrv.nl proxy on raw Google Drive thumbnail with default width
       img.src = `https://wsrv.nl/?url=${encodeURIComponent(`https://drive.google.com/thumbnail?id=${driveId}`)}`;
     } else if (attempts === 3) {
-      // Fallback 4: Try Google OpenSocial Proxy on high quality thumbnail (as secondary backup)
-      const rawTarget = `https://drive.google.com/thumbnail?id=${driveId}&sz=w1600`;
-      img.src = `https://images1-focus-opensocial.googleusercontent.com/gadgets/proxy?container=focus&refresh=2592000&url=${encodeURIComponent(rawTarget)}`;
-    } else if (attempts === 4) {
-      // Fallback 5: Try docs.google.com/uc endpoint directly
+      // Fallback 4: Try docs.google.com/uc endpoint directly
       img.src = `https://docs.google.com/uc?export=view&id=${driveId}`;
-    } else if (attempts === 5) {
-      // Fallback 6: Try direct lh3 endpoint
+    } else if (attempts === 4) {
+      // Fallback 5: Try direct lh3 endpoint
       img.src = `https://lh3.googleusercontent.com/d/${driveId}=s0`;
     } else {
-      // Fallback 7: default inline SVG
+      // Fallback 6: default inline SVG
       img.src = SVG_PLACEHOLDER;
     }
   } else {

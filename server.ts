@@ -107,88 +107,115 @@ async function startServer() {
 
   // API Route to proxy Google Drive images server-side to avoid cross-origin cookie / block issues
   app.get('/api/drive-image', async (req, res) => {
-    try {
-      const { id } = req.query;
-      if (!id || typeof id !== 'string') {
-        return res.status(400).json({ error: 'Missing file id parameter' });
-      }
-
-      // Shared browser-impersonating headers to ensure Google Drive doesn't block the backend Cloud Run request
-      const requestHeaders = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Referer': 'https://drive.google.com/',
-      };
-
-      // Priority 1: High-Performance Google User Content CDN (lh3.googleusercontent.com) with =s0 (Original full-scale size, no pixelation)
-      const lh3Url = `https://lh3.googleusercontent.com/d/${id}=s0`;
-      try {
-        const response = await fetch(lh3Url, { headers: requestHeaders });
-        if (response.ok) {
-          const contentType = response.headers.get('content-type') || 'image/jpeg';
-          res.setHeader('Content-Type', contentType);
-          res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400'); // Cache for 7 days
-          const buffer = await response.arrayBuffer();
-          return res.send(Buffer.from(buffer));
-        }
-      } catch (e) {
-        console.warn(`lh3 proxy failed for ID ${id}:`, e);
-      }
-
-      // Priority 2: High-Quality Google Drive Thumbnail
-      const thumbnail1600Url = `https://drive.google.com/thumbnail?id=${id}&sz=w1600`;
-      try {
-        const response = await fetch(thumbnail1600Url, { headers: requestHeaders });
-        if (response.ok) {
-          const contentType = response.headers.get('content-type') || 'image/jpeg';
-          res.setHeader('Content-Type', contentType);
-          res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400');
-          const buffer = await response.arrayBuffer();
-          return res.send(Buffer.from(buffer));
-        }
-      } catch (e) {
-        console.warn(`thumbnail w1600 proxy failed for ID ${id}:`, e);
-      }
-
-      // Priority 3: Medium-Quality Thumbnail (sz=w800)
-      const thumbnail800Url = `https://drive.google.com/thumbnail?id=${id}&sz=w800`;
-      try {
-        const response = await fetch(thumbnail800Url, { headers: requestHeaders });
-        if (response.ok) {
-          const contentType = response.headers.get('content-type') || 'image/jpeg';
-          res.setHeader('Content-Type', contentType);
-          res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400');
-          const buffer = await response.arrayBuffer();
-          return res.send(Buffer.from(buffer));
-        }
-      } catch (e) {
-        console.warn(`thumbnail w800 proxy failed for ID ${id}:`, e);
-      }
-
-      // Priority 4: Google Drive uc (raw web preview view/download format)
-      const ucUrl = `https://docs.google.com/uc?export=download&id=${id}`;
-      try {
-        const response = await fetch(ucUrl, { headers: requestHeaders });
-        if (response.ok) {
-          const contentType = response.headers.get('content-type') || 'image/jpeg';
-          res.setHeader('Content-Type', contentType);
-          res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400');
-          const buffer = await response.arrayBuffer();
-          return res.send(Buffer.from(buffer));
-        }
-      } catch (e) {
-        console.warn(`uc proxy failed for ID ${id}:`, e);
-      }
-
-      // If all proxy methods fail, redirect to the highly reliable wsrv.nl CDN proxy
-      // This strips Referer headers and handles CDN caching, bypassing any 403 blocks on potnuengshop.com
-      console.error(`All proxy methods failed to fetch Google Drive image ${id}. Redirecting to wsrv.nl...`);
-      res.redirect(`https://wsrv.nl/?url=${encodeURIComponent(`https://lh3.googleusercontent.com/d/${id}=s0`)}`);
-    } catch (error) {
-      console.error('Fatal error proxying Google Drive image:', error);
-      res.redirect(`https://wsrv.nl/?url=${encodeURIComponent(`https://lh3.googleusercontent.com/d/${req.query.id}=s0`)}`);
+    const { id } = req.query;
+    console.log(`[DriveImageProxy] Received request for ID: "${id}"`);
+    
+    if (!id || typeof id !== 'string') {
+      console.warn('[DriveImageProxy] Missing or invalid file ID');
+      return res.status(400).json({ error: 'Missing file id parameter' });
     }
+
+    // Shared browser-impersonating headers to ensure Google Drive doesn't block the backend Cloud Run request
+    const requestHeaders = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Referer': 'https://drive.google.com/',
+    };
+
+    // Priority 1: High-Performance Google User Content CDN (lh3.googleusercontent.com) with =s0 (Original full-scale size, no pixelation)
+    const lh3Url = `https://lh3.googleusercontent.com/d/${id}=s0`;
+    try {
+      console.log(`[DriveImageProxy] Attempting Priority 1 (lh3 direct): ${lh3Url}`);
+      const response = await fetch(lh3Url, { headers: requestHeaders });
+      console.log(`[DriveImageProxy] Priority 1 response status: ${response.status} ${response.statusText}`);
+      if (response.ok) {
+        const contentType = response.headers.get('content-type') || 'image/jpeg';
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400'); // Cache for 7 days
+        const buffer = await response.arrayBuffer();
+        console.log(`[DriveImageProxy] Priority 1 SUCCESS! Loaded ${buffer.byteLength} bytes. Content-Type: ${contentType}`);
+        return res.send(Buffer.from(buffer));
+      }
+    } catch (e) {
+      console.warn(`[DriveImageProxy] Priority 1 (lh3 proxy) failed for ID ${id}:`, e);
+    }
+
+    // Priority 2: High-Quality Google Drive Thumbnail
+    const thumbnail1600Url = `https://drive.google.com/thumbnail?id=${id}&sz=w1600`;
+    try {
+      console.log(`[DriveImageProxy] Attempting Priority 2 (Thumbnail w1600): ${thumbnail1600Url}`);
+      const response = await fetch(thumbnail1600Url, { headers: requestHeaders });
+      console.log(`[DriveImageProxy] Priority 2 response status: ${response.status} ${response.statusText}`);
+      if (response.ok) {
+        const contentType = response.headers.get('content-type') || 'image/jpeg';
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400');
+        const buffer = await response.arrayBuffer();
+        console.log(`[DriveImageProxy] Priority 2 SUCCESS! Loaded ${buffer.byteLength} bytes. Content-Type: ${contentType}`);
+        return res.send(Buffer.from(buffer));
+      }
+    } catch (e) {
+      console.warn(`[DriveImageProxy] Priority 2 (thumbnail w1600 proxy) failed for ID ${id}:`, e);
+    }
+
+    // Priority 3: Medium-Quality Thumbnail (sz=w800)
+    const thumbnail800Url = `https://drive.google.com/thumbnail?id=${id}&sz=w800`;
+    try {
+      console.log(`[DriveImageProxy] Attempting Priority 3 (Thumbnail w800): ${thumbnail800Url}`);
+      const response = await fetch(thumbnail800Url, { headers: requestHeaders });
+      console.log(`[DriveImageProxy] Priority 3 response status: ${response.status} ${response.statusText}`);
+      if (response.ok) {
+        const contentType = response.headers.get('content-type') || 'image/jpeg';
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400');
+        const buffer = await response.arrayBuffer();
+        console.log(`[DriveImageProxy] Priority 3 SUCCESS! Loaded ${buffer.byteLength} bytes. Content-Type: ${contentType}`);
+        return res.send(Buffer.from(buffer));
+      }
+    } catch (e) {
+      console.warn(`[DriveImageProxy] Priority 3 (thumbnail w800 proxy) failed for ID ${id}:`, e);
+    }
+
+    // Priority 4: Google Drive uc (raw web preview view/download format)
+    const ucUrl = `https://docs.google.com/uc?export=download&id=${id}`;
+    try {
+      console.log(`[DriveImageProxy] Attempting Priority 4 (uc download): ${ucUrl}`);
+      const response = await fetch(ucUrl, { headers: requestHeaders });
+      console.log(`[DriveImageProxy] Priority 4 response status: ${response.status} ${response.statusText}`);
+      if (response.ok) {
+        const contentType = response.headers.get('content-type') || 'image/jpeg';
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400');
+        const buffer = await response.arrayBuffer();
+        console.log(`[DriveImageProxy] Priority 4 SUCCESS! Loaded ${buffer.byteLength} bytes. Content-Type: ${contentType}`);
+        return res.send(Buffer.from(buffer));
+      }
+    } catch (e) {
+      console.warn(`[DriveImageProxy] Priority 4 (uc proxy) failed for ID ${id}:`, e);
+    }
+
+    // Priority 5: Attempt without headers (pure fetch)
+    try {
+      console.log(`[DriveImageProxy] Attempting Priority 5 (Pure lh3 without headers)`);
+      const response = await fetch(lh3Url);
+      console.log(`[DriveImageProxy] Priority 5 response status: ${response.status}`);
+      if (response.ok) {
+        const contentType = response.headers.get('content-type') || 'image/jpeg';
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400');
+        const buffer = await response.arrayBuffer();
+        console.log(`[DriveImageProxy] Priority 5 SUCCESS! Loaded ${buffer.byteLength} bytes.`);
+        return res.send(Buffer.from(buffer));
+      }
+    } catch (e) {
+      console.warn(`[DriveImageProxy] Priority 5 failed for ID ${id}:`, e);
+    }
+
+    // If all proxy methods fail, redirect to the highly reliable wsrv.nl CDN proxy
+    // This strips Referer headers and handles CDN caching, bypassing any 403 blocks on potnuengshop.com
+    console.error(`[DriveImageProxy] All proxy methods failed to fetch Google Drive image ${id}. Redirecting to wsrv.nl...`);
+    res.redirect(`https://wsrv.nl/?url=${encodeURIComponent(`https://lh3.googleusercontent.com/d/${id}=s0`)}`);
   });
 
   // API Route for ZIP downloads - runs in both development and production (Shared builds)
