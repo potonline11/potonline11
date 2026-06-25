@@ -113,47 +113,79 @@ async function startServer() {
         return res.status(400).json({ error: 'Missing file id parameter' });
       }
 
-      // We try fetching the high-quality 1600px thumbnail because it is extremely sharp, fast, and cached
-      const googleDriveUrl = `https://drive.google.com/thumbnail?id=${id}&sz=w1600`;
-      
-      const response = await fetch(googleDriveUrl);
-      if (!response.ok) {
-        console.warn(`High-quality w1600 thumbnail failed for ID ${id}, trying w800 fallback...`);
-        // Fallback to w800 if w1600 fails
-        const fallbackUrl = `https://drive.google.com/thumbnail?id=${id}&sz=w800`;
-        const fallbackResponse = await fetch(fallbackUrl);
-        
-        if (fallbackResponse.ok) {
-          const contentType = fallbackResponse.headers.get('content-type') || 'image/jpeg';
+      // Shared browser-impersonating headers to ensure Google Drive doesn't block the backend Cloud Run request
+      const requestHeaders = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': 'https://drive.google.com/',
+      };
+
+      // Priority 1: High-Performance Google User Content CDN (lh3.googleusercontent.com)
+      const lh3Url = `https://lh3.googleusercontent.com/d/${id}=s1600`;
+      try {
+        const response = await fetch(lh3Url, { headers: requestHeaders });
+        if (response.ok) {
+          const contentType = response.headers.get('content-type') || 'image/jpeg';
           res.setHeader('Content-Type', contentType);
-          res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 1 day
-          const buffer = await fallbackResponse.arrayBuffer();
+          res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400'); // Cache for 7 days
+          const buffer = await response.arrayBuffer();
           return res.send(Buffer.from(buffer));
         }
-
-        // Fallback to uc endpoint if thumbnail fails
-        const ucUrl = `https://docs.google.com/uc?export=download&id=${id}`;
-        const ucResponse = await fetch(ucUrl);
-        if (!ucResponse.ok) {
-          throw new Error(`Google Drive API returned status ${ucResponse.status}`);
-        }
-        
-        const contentType = ucResponse.headers.get('content-type') || 'image/jpeg';
-        res.setHeader('Content-Type', contentType);
-        res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 1 day
-        
-        const buffer = await ucResponse.arrayBuffer();
-        return res.send(Buffer.from(buffer));
+      } catch (e) {
+        console.warn(`lh3 proxy failed for ID ${id}:`, e);
       }
 
-      const contentType = response.headers.get('content-type') || 'image/jpeg';
-      res.setHeader('Content-Type', contentType);
-      res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 1 day
-      
-      const buffer = await response.arrayBuffer();
-      res.send(Buffer.from(buffer));
+      // Priority 2: High-Quality Google Drive Thumbnail
+      const thumbnail1600Url = `https://drive.google.com/thumbnail?id=${id}&sz=w1600`;
+      try {
+        const response = await fetch(thumbnail1600Url, { headers: requestHeaders });
+        if (response.ok) {
+          const contentType = response.headers.get('content-type') || 'image/jpeg';
+          res.setHeader('Content-Type', contentType);
+          res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400');
+          const buffer = await response.arrayBuffer();
+          return res.send(Buffer.from(buffer));
+        }
+      } catch (e) {
+        console.warn(`thumbnail w1600 proxy failed for ID ${id}:`, e);
+      }
+
+      // Priority 3: Medium-Quality Thumbnail (sz=w800)
+      const thumbnail800Url = `https://drive.google.com/thumbnail?id=${id}&sz=w800`;
+      try {
+        const response = await fetch(thumbnail800Url, { headers: requestHeaders });
+        if (response.ok) {
+          const contentType = response.headers.get('content-type') || 'image/jpeg';
+          res.setHeader('Content-Type', contentType);
+          res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400');
+          const buffer = await response.arrayBuffer();
+          return res.send(Buffer.from(buffer));
+        }
+      } catch (e) {
+        console.warn(`thumbnail w800 proxy failed for ID ${id}:`, e);
+      }
+
+      // Priority 4: Google Drive uc (raw web preview view/download format)
+      const ucUrl = `https://docs.google.com/uc?export=download&id=${id}`;
+      try {
+        const response = await fetch(ucUrl, { headers: requestHeaders });
+        if (response.ok) {
+          const contentType = response.headers.get('content-type') || 'image/jpeg';
+          res.setHeader('Content-Type', contentType);
+          res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400');
+          const buffer = await response.arrayBuffer();
+          return res.send(Buffer.from(buffer));
+        }
+      } catch (e) {
+        console.warn(`uc proxy failed for ID ${id}:`, e);
+      }
+
+      // If all proxy methods fail, redirect as an absolute last resort
+      console.error(`All proxy methods failed to fetch Google Drive image ${id}. Redirecting client directly...`);
+      res.redirect(`https://drive.google.com/thumbnail?id=${id}&sz=w1600`);
     } catch (error) {
-      console.error('Error proxying Google Drive image:', error, 'redirecting as fallback...');
+      console.error('Fatal error proxying Google Drive image:', error);
       res.redirect(`https://drive.google.com/thumbnail?id=${req.query.id}&sz=w1600`);
     }
   });
