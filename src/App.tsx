@@ -3,7 +3,6 @@ import React, { useState, useEffect, useCallback, useMemo, startTransition, Form
 import { User } from 'firebase/auth';
 import JSZip from 'jszip';
 import {
-
   initAuth,
   googleSignIn,
   logoutUser,
@@ -4803,22 +4802,21 @@ function VercelBlobUploader() {
 
     setUploading(true);
     setBlobUrl('');
+
     try {
-      // ดึงไฟล์ส่งตรงเข้าคลัง noinashop ทันทีโดยไม่ผ่านตัวดักหลังบ้าน
+      // เรียกใช้ฟังก์ชันอัจฉริยะของ Vercel ดึงไฟล์ส่งตรงเข้าคลัง noinashop ทันที
       const newBlob = await upload(file.name, file, {
         access: 'public',
-        handleUploadUrl: '/api/upload', // วิ่งไปขอ token จากหลังบ้าน
+        handleUploadUrl: '/api/upload', // วิ่งไปขอ Token ความปลอดภัยจากหลังบ้านก่อน
       });
 
       if (newBlob.url) {
         setBlobUrl(newBlob.url);
         alert('อัปโหลดขึ้น Vercel Blob สำเร็จร้อยเปอร์เซ็นต์แล้วครับ!');
       }
-    }
-
     } catch (error) {
       console.error(error);
-      alert('เกิดข้อผิดพลาดในการอัปโหลดรูปภาพ');
+      alert('เกิดข้อผิดพลาดในการเชื่อมต่อคลังรูปภาพ');
     } finally {
       setUploading(false);
     }
