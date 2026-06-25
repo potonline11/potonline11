@@ -4855,9 +4855,7 @@ function VercelBlobUploader() {
           </p>
           <img src={blobUrl} alt="Preview" style={{ maxWidth: '100%', maxHeight: '150px', marginTop: '15px', display: 'block', borderRadius: '4px' }} />
         </div>
-      )}
-
-    
+  
     </div>
   );
 }
