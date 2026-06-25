@@ -166,8 +166,9 @@ const convertDriveImageUrl = (url: string): string => {
 
   const driveId = getGoogleDriveId(trimmed);
   if (driveId) {
-    // ใช้ Express backend proxy ตัวเองดีที่สุด ป้องกัน Referer 403 บล็อก และช่วยตรวจสอบรูปภาพได้ 100% ในทุกสภาวะแวดล้อม (รวมถึงโดเมนจริง potnuengshop.com)
-    return `/api/drive-image?id=${driveId}`;
+    // ใช้ WordPress Photon CDN โดยตรงตั้งแต่ต้นเพื่อความเร็วสูงสุด 100% ป้องกัน Referer Block 
+    // และทำงานได้ทันทีบน Static Website Hosting (เช่น Vercel, Netlify, Github Pages ของ potnuengshop.com) โดยไม่ต้องพึ่งพาเซิร์ฟเวอร์ Express Backend ของเรา
+    return `https://i0.wp.com/lh3.googleusercontent.com/d/${driveId}=s0`;
   }
 
   return trimmed;
@@ -220,15 +221,17 @@ const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
   if (driveId) {
     // ลิสต์ Proxy สำรองความพร้อมใช้งานสูง (High-Availability CDN Proxies)
     const fallbacks = [
-      // ลำดับที่ 1: ใช้ Express backend proxy ของเราเอง (ดีที่สุด เสถียรที่สุด ผ่าน Node fetch และแก้ Referer/Cookie block)
-      `/api/drive-image?id=${driveId}`,
-      // ลำดับที่ 2: ใช้ Google Docs UC export download ตรงๆ (ไม่ติดบล็อก unauthenticated login สำหรับไฟล์แชร์สาธารณะ)
-      `https://docs.google.com/uc?export=download&id=${driveId}`,
-      // ลำดับที่ 3: ใช้ wsrv.nl ครอบดึงจาก Google Docs uc download ตรงๆ เพื่อช่วยแบ่งเบาภาระและทำ CDN Caching
+      // ลำดับที่ 1: WordPress Jetpack/Photon CDN ช่วยแคชรูปภาพผ่านเซิร์ฟเวอร์ความเร็วสูง (ไม่ต้องผ่าน Express Backend ของเรา)
+      `https://i0.wp.com/lh3.googleusercontent.com/d/${driveId}=s0`,
+      // ลำดับที่ 2: ใช้ wsrv.nl ครอบดึง lh3.googleusercontent.com เพื่อทำความสะอาด headers/referer และแคชความเร็วสูง
+      `https://wsrv.nl/?url=${encodeURIComponent(`https://lh3.googleusercontent.com/d/${driveId}=s0`)}`,
+      // ลำดับที่ 3: ใช้ wsrv.nl ครอบดึงจาก Google Docs uc download
       `https://wsrv.nl/?url=${encodeURIComponent(`https://docs.google.com/uc?export=download&id=${driveId}`)}`,
-      // ลำดับที่ 4: Google Thumbnail API แท้ ความละเอียดสูง w1600 (ตรงที่สุด)
+      // ลำดับที่ 4: ใช้ Express backend proxy เผื่อรันอยู่บน Full-Stack Server เติมเต็มความปลอดภัย
+      `/api/drive-image?id=${driveId}`,
+      // ลำดับที่ 5: Google Thumbnail API แท้ ความละเอียดสูง w1600 (ตรงที่สุด)
       `https://drive.google.com/thumbnail?id=${driveId}&sz=w1600`,
-      // ลำดับที่ 5: SVG Placeholder เพื่อเป็นทางเลือกสุดท้าย
+      // ลำดับที่ 6: SVG Placeholder เพื่อเป็นทางเลือกสุดท้าย
       SVG_PLACEHOLDER
     ];
 
