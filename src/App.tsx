@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, startTransition, Form
 import { User } from 'firebase/auth';
 import JSZip from 'jszip';
 import {
+ import { upload } from '@vercel/blob/client'; 
   initAuth,
   googleSignIn,
   logoutUser,
@@ -4801,23 +4802,19 @@ function VercelBlobUploader() {
 
     setUploading(true);
     setBlobUrl('');
-
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const response = await fetch(`/api/upload?filename=${encodeURIComponent(file.name)}`, {
-        method: 'POST',
-        body: formData,
+      // ดึงไฟล์ส่งตรงเข้าคลัง noinashop ทันทีโดยไม่ผ่านตัวดักหลังบ้าน
+      const newBlob = await upload(file.name, file, {
+        access: 'public',
+        handleUploadUrl: '/api/upload', // วิ่งไปขอ token จากหลังบ้าน
       });
 
-      if (!response.ok) throw new Error('Upload failed');
-
-      const data = await response.json();
-      if (data.url) {
-        setBlobUrl(data.url);
-        alert('อัปโหลดขึ้น Vercel Blob สำเร็จแล้วครับ!');
+      if (newBlob.url) {
+        setBlobUrl(newBlob.url);
+        alert('อัปโหลดขึ้น Vercel Blob สำเร็จร้อยเปอร์เซ็นต์แล้วครับ!');
       }
+    }
+
     } catch (error) {
       console.error(error);
       alert('เกิดข้อผิดพลาดในการอัปโหลดรูปภาพ');
