@@ -31,4 +31,6 @@ export interface HubItem {
   rating: string;
   type?: string;
   subCategory?: string;
+  isHtmlImage?: boolean;
+  htmlImage?: string;
 }

@@ -153,6 +153,19 @@ const convertDriveImageUrl = (url: string): string => {
   const cleanedUrl = extractUrlFromFormula(url);
   const trimmed = cleanedUrl.trim();
   
+  // If the input is actually an HTML image tag (or contains one)
+  if (trimmed.includes('<img')) {
+    const srcMatch = trimmed.match(/src=["']([^"']+)["']/i);
+    if (srcMatch && srcMatch[1]) {
+      const srcUrl = srcMatch[1].trim();
+      const driveId = getGoogleDriveId(srcUrl);
+      if (driveId) {
+        return `https://wsrv.nl/?url=${encodeURIComponent(`https://docs.google.com/uc?export=download&id=${driveId}`)}`;
+      }
+      return srcUrl;
+    }
+  }
+
   // If it's already clean or contains other non-drive image CDN link
   if (trimmed.startsWith('http') && 
       !trimmed.includes('drive.google.com') && 
@@ -166,9 +179,8 @@ const convertDriveImageUrl = (url: string): string => {
 
   const driveId = getGoogleDriveId(trimmed);
   if (driveId) {
-    // ใช้ WordPress Photon CDN โดยตรงตั้งแต่ต้นเพื่อความเร็วสูงสุด 100% ป้องกัน Referer Block 
-    // และทำงานได้ทันทีบน Static Website Hosting (เช่น Vercel, Netlify, Github Pages ของ potnuengshop.com) โดยไม่ต้องพึ่งพาเซิร์ฟเวอร์ Express Backend ของเรา
-    return `https://i0.wp.com/lh3.googleusercontent.com/d/${driveId}=s0`;
+    // ใช้ wsrv.nl CDN Proxy มั่นใจได้ว่าเสถียรที่สุด 100% บนหน้าเว็บ potnuengshop.com โดยไม่ติดปัญหา Referer Check และไม่ต้องใช้ Express server
+    return `https://wsrv.nl/?url=${encodeURIComponent(`https://docs.google.com/uc?export=download&id=${driveId}`)}`;
   }
 
   return trimmed;
@@ -221,12 +233,12 @@ const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
   if (driveId) {
     // ลิสต์ Proxy สำรองความพร้อมใช้งานสูง (High-Availability CDN Proxies)
     const fallbacks = [
-      // ลำดับที่ 1: WordPress Jetpack/Photon CDN ช่วยแคชรูปภาพผ่านเซิร์ฟเวอร์ความเร็วสูง (ไม่ต้องผ่าน Express Backend ของเรา)
-      `https://i0.wp.com/lh3.googleusercontent.com/d/${driveId}=s0`,
+      // ลำดับที่ 1: ใช้ wsrv.nl ครอบดึงจาก Google Docs uc download เพื่อล้าง referer/cookies (เสถียรที่สุดสำหรับเว็บ Static อย่าง potnuengshop.com)
+      `https://wsrv.nl/?url=${encodeURIComponent(`https://docs.google.com/uc?export=download&id=${driveId}`)}`,
       // ลำดับที่ 2: ใช้ wsrv.nl ครอบดึง lh3.googleusercontent.com เพื่อทำความสะอาด headers/referer และแคชความเร็วสูง
       `https://wsrv.nl/?url=${encodeURIComponent(`https://lh3.googleusercontent.com/d/${driveId}=s0`)}`,
-      // ลำดับที่ 3: ใช้ wsrv.nl ครอบดึงจาก Google Docs uc download
-      `https://wsrv.nl/?url=${encodeURIComponent(`https://docs.google.com/uc?export=download&id=${driveId}`)}`,
+      // ลำดับที่ 3: WordPress Jetpack/Photon CDN ช่วยแคชรูปภาพผ่านเซิร์ฟเวอร์ความเร็วสูง (ไม่ต้องผ่าน Express Backend ของเรา)
+      `https://i0.wp.com/lh3.googleusercontent.com/d/${driveId}=s0`,
       // ลำดับที่ 4: ใช้ Express backend proxy เผื่อรันอยู่บน Full-Stack Server เติมเต็มความปลอดภัย
       `/api/drive-image?id=${driveId}`,
       // ลำดับที่ 5: Google Thumbnail API แท้ ความละเอียดสูง w1600 (ตรงที่สุด)
@@ -1895,6 +1907,27 @@ export default function App() {
       const imageUrl = convertDriveImageUrl(rawImageUrl);
       const downloadUrl = convertDriveDownloadUrl(rawDownloadUrl);
 
+      // ตรวจสอบและแปลงโค้ด HTML Image จาก Google Sheet โดยตรงตามที่ผู้ใช้ต้องการ
+      let isHtmlImage = false;
+      let htmlImage = '';
+      const trimmedRaw = (rawImageUrl || '').trim();
+      if (trimmedRaw.includes('<img')) {
+        isHtmlImage = true;
+        const srcMatch = trimmedRaw.match(/src=["']([^"']+)["']/i);
+        if (srcMatch && srcMatch[1]) {
+          const srcUrl = srcMatch[1].trim();
+          const driveId = getGoogleDriveId(srcUrl);
+          if (driveId) {
+            const workingUrl = `https://wsrv.nl/?url=${encodeURIComponent(`https://docs.google.com/uc?export=download&id=${driveId}`)}`;
+            htmlImage = trimmedRaw.replace(srcMatch[1], workingUrl);
+          } else {
+            htmlImage = trimmedRaw;
+          }
+        } else {
+          htmlImage = trimmedRaw;
+        }
+      }
+
       return {
         id: Math.random().toString(36).substr(2, 9),
         title,
@@ -1908,7 +1941,9 @@ export default function App() {
         downloadUrl,
         rating,
         type: extractedType,
-        subCategory: extractedSubcat
+        subCategory: extractedSubcat,
+        isHtmlImage,
+        htmlImage
       };
     });
   }
@@ -4015,14 +4050,21 @@ function doPost(e) {
             
             {/* Header Image cover */}
             <div className="relative h-48 select-none bg-gray-950">
-              <img
-                src={selectedProduct.imageUrl || null}
-                alt={selectedProduct.title}
-                className="w-full h-full object-cover opacity-80"
-                referrerPolicy="no-referrer"
-                data-original-drive-id={getGoogleDriveId(selectedProduct.imageUrl || '') || undefined}
-                onError={handleImageError}
-              />
+              {selectedProduct.isHtmlImage && selectedProduct.htmlImage ? (
+                <div 
+                  className="w-full h-full [&>img]:w-full [&>img]:h-full [&>img]:object-cover opacity-80"
+                  dangerouslySetInnerHTML={{ __html: selectedProduct.htmlImage }}
+                />
+              ) : (
+                <img
+                  src={selectedProduct.imageUrl || null}
+                  alt={selectedProduct.title}
+                  className="w-full h-full object-cover opacity-80"
+                  referrerPolicy="no-referrer"
+                  data-original-drive-id={getGoogleDriveId(selectedProduct.imageUrl || '') || undefined}
+                  onError={handleImageError}
+                />
+              )}
               <div className="absolute inset-0 bg-gradient-to-t from-[#0b101c] via-[#0b101c]/30 to-transparent" />
               
               <button
