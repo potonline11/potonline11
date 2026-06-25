@@ -4794,16 +4794,15 @@ function doPost(e) {
 function VercelBlobUploader() {
   const [uploading, setUploading] = useState(false);
   const [blobUrl, setBlobUrl] = useState('');
-const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setUploading(true);
     setBlobUrl('');
 
-  };
     try {
-      // สร้างกล่องฟอร์มมาตรฐานสำหรับแพ็คไฟล์รูปภาพส่งไปหลังบ้านอย่างปลอดภัย
       const formData = new FormData();
       formData.append('file', file);
 
@@ -4825,6 +4824,7 @@ const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     } finally {
       setUploading(false);
     }
+  };
 
   return (
     <div className="p-5 border-2 border-dashed border-gray-300 rounded-lg my-5 bg-gray-50 text-gray-800">
@@ -4838,8 +4838,10 @@ const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         disabled={uploading}
         className="block my-3"
       />
-       {uploading && <p className="text-blue-600 font-bold text-sm">กำลังอัปโหลดรูปภาพ โปรดรอสักครู่...</p>}
-             {blobUrl && (
+      
+      {uploading && <p className="text-blue-600 font-bold text-sm">กำลังอัปโหลดรูปภาพ โปรดรอสักครู่...</p>}
+      
+      {blobUrl && (
         <div style={{ marginTop: '20px', background: '#fff', padding: '15px', borderRadius: '6px', border: '2px solid #0070f3', display: 'block' }}>
           <p style={{ margin: '0 0 8px 0', color: '#008000', fontWeight: 'bold', fontSize: '15px' }}>
             🎉 อัปโหลดสำเร็จ! คัดลอกลิงก์ด้านล่างนี้ได้เลย:
@@ -4860,5 +4862,3 @@ const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     </div>
   );
 }
- 
-      
