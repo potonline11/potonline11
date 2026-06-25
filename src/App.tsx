@@ -4835,9 +4835,8 @@ function VercelBlobUploader() {
         disabled={uploading}
         className="block my-3"
       />
-      
-      {uploading && <p className="text-blue-600 font-bold text-sm">กำลังอัปโหลดรูปภาพ โปรดรอสักครู่...</p>}
-            {blobUrl && (
+       {uploading && <p className="text-blue-600 font-bold text-sm">กำลังอัปโหลดรูปภาพ โปรดรอสักครู่...</p>}
+             {blobUrl && (
         <div style={{ marginTop: '20px', background: '#fff', padding: '15px', borderRadius: '6px', border: '2px solid #0070f3', display: 'block' }}>
           <p style={{ margin: '0 0 8px 0', color: '#008000', fontWeight: 'bold', fontSize: '15px' }}>
             🎉 อัปโหลดสำเร็จ! คัดลอกลิงก์ด้านล่างนี้ได้เลย:
@@ -4858,4 +4857,5 @@ function VercelBlobUploader() {
     </div>
   );
 }
-
+ 
+      
