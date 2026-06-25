@@ -4812,7 +4812,7 @@ function VercelBlobUploader() {
 
       const data = await response.json();
       if (data.url) {
-        setBlobUrl(data.url);
+    setBlobUrl(data.url);
         alert('อัปโหลดขึ้น Vercel Blob สำเร็จแล้วครับ!');
       }
     } catch (error) {
@@ -4838,20 +4838,26 @@ function VercelBlobUploader() {
       
       {uploading && <p className="text-blue-600 font-bold text-sm">กำลังอัปโหลดรูปภาพ โปรดรอสักครู่...</p>}
       
-      {blobUrl && (
-        <div className="mt-4 bg-white p-3 rounded border border-gray-200">
-          <p className="text-sm text-green-600 font-bold mb-1">อัปโหลดเสร็จเรียบร้อย! คัดลอกลิงก์ด้านล่างนี้ได้เลย:</p>
+           {blobUrl && (
+        <div style={{ marginTop: '20px', background: '#fff', padding: '15px', borderRadius: '6px', border: '2px solid #0070f3', display: 'block' }}>
+          <p style={{ margin: '0 0 8px 0', color: '#008000', fontWeight: 'bold', fontSize: '15px' }}>
+            🎉 อัปโหลดสำเร็จ! คัดลอกลิงก์ด้านล่างนี้ได้เลย:
+          </p>
           <input 
             type="text" 
             value={blobUrl} 
             readOnly 
             onClick={(e) => (e.target as HTMLInputElement).select()}
-            className="w-full p-2 border border-blue-500 rounded bg-blue-50 cursor-pointer text-sm"
+            style={{ width: '100%', padding: '10px', boxSizing: 'border-box', border: '1px solid #0070f3', borderRadius: '4px', background: '#f0f7ff', color: '#000', fontStyle: 'normal', fontSize: '14px', cursor: 'pointer' }}
           />
-          <p className="text-xs text-gray-400 mt-1">* คลิกที่ช่องข้อความด้านบนเพื่อเลือกทั้งหมด แล้วกดคัดลอกได้เลย</p>
-          <img src={blobUrl} alt="Preview" className="max-w-[150px] max-h-[150px] mt-3 block rounded" />
+          <p style={{ fontSize: '12px', color: '#666', margin: '5px 0 0 0' }}>
+            * คลิกในกล่องสีฟ้าด้านบนเพื่อเลือกทั้งหมด แล้วกดคัดลอก (Copy) ไปใส่ใน Google Sheets
+          </p>
+          <img src={blobUrl} alt="Preview" style={{ maxWidth: '100%', maxHeight: '150px', marginTop: '15px', display: 'block', borderRadius: '4px' }} />
         </div>
       )}
+
+    
     </div>
   );
 }
