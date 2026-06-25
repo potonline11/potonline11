@@ -122,7 +122,7 @@ async function startServer() {
       };
 
       // Priority 1: High-Performance Google User Content CDN (lh3.googleusercontent.com)
-      const lh3Url = `https://lh3.googleusercontent.com/d/${id}=s1600`;
+      const lh3Url = `https://lh3.googleusercontent.com/d/${id}`;
       try {
         const response = await fetch(lh3Url, { headers: requestHeaders });
         if (response.ok) {

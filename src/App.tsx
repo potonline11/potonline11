@@ -218,7 +218,7 @@ const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
   if (driveId) {
     if (attempts === 0) {
       // Fallback 1: Try direct lh3.googleusercontent.com/d/ URL with referrerPolicy
-      img.src = `https://lh3.googleusercontent.com/d/${driveId}=s1600`;
+      img.src = `https://lh3.googleusercontent.com/d/${driveId}`;
     } else if (attempts === 1) {
       // Fallback 2: Try direct Google Drive Thumbnail (Client-side directly, sz=w1600)
       img.src = `https://drive.google.com/thumbnail?id=${driveId}&sz=w1600`;
