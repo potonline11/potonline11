@@ -166,9 +166,11 @@ const convertDriveImageUrl = (url: string): string => {
 
   const driveId = getGoogleDriveId(trimmed);
   if (driveId) {
-    // 💡 ดึงรูปภาพผ่านระบบ Google Drive Thumbnail (sz=w1600) โดยตรง เพื่อหลีกเลี่ยง Referer 403 Forbidden ในโดเมนจริง potnuengshop.com
-    // ระบบ Thumbnail ของ Google ไม่มีการเช็ค Referer และให้บริการภาพความละเอียดสูง มีความคมชัดสูงสุด สามารถแสดงบน Static App ได้อย่างสมบูรณ์แบบ
-    return `https://drive.google.com/thumbnail?id=${driveId}&sz=w1600`;
+    // 💡 เพื่อหลีกเลี่ยง Referer 403 Forbidden และป้องกันไม่ให้ภาพแตก (คมชัดสูงสุด 100% ในโดเมนจริง potnuengshop.com)
+    // เราจะดึงภาพผ่าน Google OpenSocial Gadgets Proxy ครอบตัวไฟล์ Thumbnail ที่ระบุขนาดความกว้างสูงสุด (sz=w1600)
+    // การใช้ระบบ OpenSocial Proxy ซึ่งเป็นเซิร์ฟเวอร์ของ Google เอง จะช่วยข้ามการบล็อค Referer และให้บริการภาพความละเอียดสูงได้อย่างสมบูรณ์แบบโดยไม่ต้องพึ่งพาเซิร์ฟเวอร์หลัก
+    const rawTarget = `https://drive.google.com/thumbnail?id=${driveId}&sz=w1600`;
+    return `https://images1-focus-opensocial.googleusercontent.com/gadgets/proxy?container=focus&refresh=2592000&url=${encodeURIComponent(rawTarget)}`;
   }
 
   return trimmed;
@@ -209,7 +211,7 @@ const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
   const SVG_PLACEHOLDER = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400"><rect width="100%" height="100%" fill="%230b101c" stroke="%231f2937" stroke-width="2"/><circle cx="300" cy="180" r="40" fill="none" stroke="%23f59e0b" stroke-width="2" stroke-dasharray="6,4"/><path d="M280 180 L320 180 M300 160 L300 200" stroke="%23f59e0b" stroke-width="2"/><text x="50%" y="270" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="16" font-weight="600" fill="%239ca3af">รูปภาพสินค้า / Product Image</text></svg>`;
 
   const attempts = parseInt(img.getAttribute('data-fallback-attempts') || '0', 10);
-  if (attempts >= 5) {
+  if (attempts >= 6) {
     // If all high quality and standard fallbacks fail, display our clean inline SVG placeholder
     img.src = SVG_PLACEHOLDER;
     return;
@@ -220,19 +222,23 @@ const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
   
   if (driveId) {
     if (attempts === 0) {
-      // Fallback 1: Try wsrv.nl proxy on the high-quality thumbnail endpoint (completely strips Referer)
-      img.src = `https://wsrv.nl/?url=${encodeURIComponent(`https://drive.google.com/thumbnail?id=${driveId}&sz=w1600`)}`;
+      // Fallback 1: Try Google OpenSocial Proxy with direct lh3.googleusercontent.com full-scale (=s0)
+      const rawTarget = `https://lh3.googleusercontent.com/d/${driveId}=s0`;
+      img.src = `https://images1-focus-opensocial.googleusercontent.com/gadgets/proxy?container=focus&refresh=2592000&url=${encodeURIComponent(rawTarget)}`;
     } else if (attempts === 1) {
-      // Fallback 2: Try wsrv.nl proxy on raw lh3 endpoint
-      img.src = `https://wsrv.nl/?url=${encodeURIComponent(`https://lh3.googleusercontent.com/d/${driveId}=s0`)}`;
+      // Fallback 2: Try wsrv.nl proxy on the high-quality thumbnail endpoint (completely strips Referer)
+      img.src = `https://wsrv.nl/?url=${encodeURIComponent(`https://drive.google.com/thumbnail?id=${driveId}&sz=w1600`)}`;
     } else if (attempts === 2) {
-      // Fallback 3: Try docs.google.com/uc endpoint directly
-      img.src = `https://docs.google.com/uc?export=view&id=${driveId}`;
+      // Fallback 3: Try wsrv.nl proxy on raw lh3 endpoint
+      img.src = `https://wsrv.nl/?url=${encodeURIComponent(`https://lh3.googleusercontent.com/d/${driveId}=s0`)}`;
     } else if (attempts === 3) {
-      // Fallback 4: Try lh3 direct endpoint directly without referrer
+      // Fallback 4: Try docs.google.com/uc endpoint directly
+      img.src = `https://docs.google.com/uc?export=view&id=${driveId}`;
+    } else if (attempts === 4) {
+      // Fallback 5: Try lh3 direct endpoint directly without referrer
       img.src = `https://lh3.googleusercontent.com/d/${driveId}=s0`;
     } else {
-      // Fallback 5: default inline SVG
+      // Fallback 6: default inline SVG
       img.src = SVG_PLACEHOLDER;
     }
   } else {
