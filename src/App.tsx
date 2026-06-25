@@ -166,10 +166,10 @@ const convertDriveImageUrl = (url: string): string => {
 
   const driveId = getGoogleDriveId(trimmed);
   if (driveId) {
-    // 💡 ดึงรูปภาพผ่านระบบ Google User Content CDN (lh3.googleusercontent.com) โดยตรง พร้อมกำหนดตัวเลือก =s0 (Original full-scale size)
+    // 💡 ดึงรูปภาพผ่านระบบ Google User Content CDN (lh3.googleusercontent.com) โดยตรง
     // เพื่อให้ภาพมีความคมชัดสูงสุด 100% ไม่แตกแน่นอน และสามารถแสดงบนโดเมนจริง potnuengshop.com (ซึ่งใช้งานแบบ Static App) ได้อย่างสมบูรณ์แบบ
     // โดยระบบจะซ่อน Referer ด้วย referrerPolicy="no-referrer" เพื่อป้องกัน Google บล็อคได้อย่างถาวร
-    return `https://lh3.googleusercontent.com/d/${driveId}=s0`;
+    return `https://lh3.googleusercontent.com/d/${driveId}`;
   }
 
   return trimmed;
@@ -221,14 +221,14 @@ const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
   
   if (driveId) {
     if (attempts === 0) {
-      // Fallback 1: Try wsrv.nl proxy with =s0 (extremely robust CDN proxy that bypasses all referer checks)
-      img.src = `https://wsrv.nl/?url=${encodeURIComponent(`https://lh3.googleusercontent.com/d/${driveId}=s0`)}`;
-    } else if (attempts === 1) {
-      // Fallback 2: Try local API Proxy (in case backend is running)
-      img.src = `/api/drive-image?id=${driveId}`;
-    } else if (attempts === 2) {
-      // Fallback 3: Try direct Google Drive Thumbnail (sz=w1600 - high quality)
+      // Fallback 1: Try direct Google Drive Thumbnail (sz=w1600 - high quality, extremely reliable across domains)
       img.src = `https://drive.google.com/thumbnail?id=${driveId}&sz=w1600`;
+    } else if (attempts === 1) {
+      // Fallback 2: Try wsrv.nl proxy (robust CDN proxy that bypasses all referer checks)
+      img.src = `https://wsrv.nl/?url=${encodeURIComponent(`https://lh3.googleusercontent.com/d/${driveId}`)}`;
+    } else if (attempts === 2) {
+      // Fallback 3: Try u/0/d path (some files require Google login session context)
+      img.src = `https://lh3.googleusercontent.com/u/0/d/${driveId}`;
     } else if (attempts === 3) {
       // Fallback 4: Try docs.google.com/uc endpoint directly
       img.src = `https://docs.google.com/uc?export=view&id=${driveId}`;
