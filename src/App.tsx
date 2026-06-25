@@ -166,10 +166,10 @@ const convertDriveImageUrl = (url: string): string => {
 
   const driveId = getGoogleDriveId(trimmed);
   if (driveId) {
-    // 💡 ดึงรูปภาพผ่านระบบ Google User Content CDN (lh3.googleusercontent.com) โดยตรง
+    // 💡 ดึงรูปภาพผ่านระบบ Google User Content CDN (lh3.googleusercontent.com) โดยตรง พร้อมกำหนดตัวเลือก =s0 (Original full-scale size)
     // เพื่อให้ภาพมีความคมชัดสูงสุด 100% ไม่แตกแน่นอน และสามารถแสดงบนโดเมนจริง potnuengshop.com (ซึ่งใช้งานแบบ Static App) ได้อย่างสมบูรณ์แบบ
     // โดยระบบจะซ่อน Referer ด้วย referrerPolicy="no-referrer" เพื่อป้องกัน Google บล็อคได้อย่างถาวร
-    return `https://lh3.googleusercontent.com/d/${driveId}`;
+    return `https://lh3.googleusercontent.com/d/${driveId}=s0`;
   }
 
   return trimmed;
@@ -225,7 +225,7 @@ const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
       img.src = `https://drive.google.com/thumbnail?id=${driveId}&sz=w1600`;
     } else if (attempts === 1) {
       // Fallback 2: Try wsrv.nl proxy (robust CDN proxy that bypasses all referer checks)
-      img.src = `https://wsrv.nl/?url=${encodeURIComponent(`https://lh3.googleusercontent.com/d/${driveId}`)}`;
+      img.src = `https://wsrv.nl/?url=${encodeURIComponent(`https://lh3.googleusercontent.com/d/${driveId}=s0`)}`;
     } else if (attempts === 2) {
       // Fallback 3: Try u/0/d path (some files require Google login session context)
       img.src = `https://lh3.googleusercontent.com/u/0/d/${driveId}`;

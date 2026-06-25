@@ -121,8 +121,8 @@ async function startServer() {
         'Referer': 'https://drive.google.com/',
       };
 
-      // Priority 1: High-Performance Google User Content CDN (lh3.googleusercontent.com)
-      const lh3Url = `https://lh3.googleusercontent.com/d/${id}`;
+      // Priority 1: High-Performance Google User Content CDN (lh3.googleusercontent.com) with =s0 (Original full-scale size, no pixelation)
+      const lh3Url = `https://lh3.googleusercontent.com/d/${id}=s0`;
       try {
         const response = await fetch(lh3Url, { headers: requestHeaders });
         if (response.ok) {
@@ -184,10 +184,10 @@ async function startServer() {
       // If all proxy methods fail, redirect to the highly reliable wsrv.nl CDN proxy
       // This strips Referer headers and handles CDN caching, bypassing any 403 blocks on potnuengshop.com
       console.error(`All proxy methods failed to fetch Google Drive image ${id}. Redirecting to wsrv.nl...`);
-      res.redirect(`https://wsrv.nl/?url=${encodeURIComponent(`https://lh3.googleusercontent.com/d/${id}`)}`);
+      res.redirect(`https://wsrv.nl/?url=${encodeURIComponent(`https://lh3.googleusercontent.com/d/${id}=s0`)}`);
     } catch (error) {
       console.error('Fatal error proxying Google Drive image:', error);
-      res.redirect(`https://wsrv.nl/?url=${encodeURIComponent(`https://lh3.googleusercontent.com/d/${req.query.id}`)}`);
+      res.redirect(`https://wsrv.nl/?url=${encodeURIComponent(`https://lh3.googleusercontent.com/d/${req.query.id}=s0`)}`);
     }
   });
 
