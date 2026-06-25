@@ -4802,17 +4802,22 @@ function VercelBlobUploader() {
     setUploading(true);
     setBlobUrl('');
 
+  };
     try {
+      // สร้างกล่องฟอร์มมาตรฐานสำหรับแพ็คไฟล์รูปภาพส่งไปหลังบ้านอย่างปลอดภัย
+      const formData = new FormData();
+      formData.append('file', file);
+
       const response = await fetch(`/api/upload?filename=${encodeURIComponent(file.name)}`, {
         method: 'POST',
-        body: file,
+        body: formData,
       });
 
       if (!response.ok) throw new Error('Upload failed');
 
       const data = await response.json();
       if (data.url) {
-    setBlobUrl(data.url);
+        setBlobUrl(data.url);
         alert('อัปโหลดขึ้น Vercel Blob สำเร็จแล้วครับ!');
       }
     } catch (error) {
@@ -4821,7 +4826,6 @@ function VercelBlobUploader() {
     } finally {
       setUploading(false);
     }
-  };
 
   return (
     <div className="p-5 border-2 border-dashed border-gray-300 rounded-lg my-5 bg-gray-50 text-gray-800">
