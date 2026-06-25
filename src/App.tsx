@@ -166,10 +166,9 @@ const convertDriveImageUrl = (url: string): string => {
 
   const driveId = getGoogleDriveId(trimmed);
   if (driveId) {
-    // 💡 ดึงรูปภาพผ่านระบบ Google User Content CDN (lh3.googleusercontent.com) โดยตรง พร้อมกำหนดตัวเลือก =s0 (Original full-scale size)
-    // เพื่อให้ภาพมีความคมชัดสูงสุด 100% ไม่แตกแน่นอน และสามารถแสดงบนโดเมนจริง potnuengshop.com (ซึ่งใช้งานแบบ Static App) ได้อย่างสมบูรณ์แบบ
-    // โดยระบบจะซ่อน Referer ด้วย referrerPolicy="no-referrer" เพื่อป้องกัน Google บล็อคได้อย่างถาวร
-    return `https://lh3.googleusercontent.com/d/${driveId}=s0`;
+    // 💡 ดึงรูปภาพผ่านระบบ Google Drive Thumbnail (sz=w1600) โดยตรง เพื่อหลีกเลี่ยง Referer 403 Forbidden ในโดเมนจริง potnuengshop.com
+    // ระบบ Thumbnail ของ Google ไม่มีการเช็ค Referer และให้บริการภาพความละเอียดสูง มีความคมชัดสูงสุด สามารถแสดงบน Static App ได้อย่างสมบูรณ์แบบ
+    return `https://drive.google.com/thumbnail?id=${driveId}&sz=w1600`;
   }
 
   return trimmed;
@@ -221,17 +220,17 @@ const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
   
   if (driveId) {
     if (attempts === 0) {
-      // Fallback 1: Try direct Google Drive Thumbnail (sz=w1600 - high quality, extremely reliable across domains)
-      img.src = `https://drive.google.com/thumbnail?id=${driveId}&sz=w1600`;
+      // Fallback 1: Try wsrv.nl proxy on the high-quality thumbnail endpoint (completely strips Referer)
+      img.src = `https://wsrv.nl/?url=${encodeURIComponent(`https://drive.google.com/thumbnail?id=${driveId}&sz=w1600`)}`;
     } else if (attempts === 1) {
-      // Fallback 2: Try wsrv.nl proxy (robust CDN proxy that bypasses all referer checks)
+      // Fallback 2: Try wsrv.nl proxy on raw lh3 endpoint
       img.src = `https://wsrv.nl/?url=${encodeURIComponent(`https://lh3.googleusercontent.com/d/${driveId}=s0`)}`;
     } else if (attempts === 2) {
-      // Fallback 3: Try u/0/d path (some files require Google login session context)
-      img.src = `https://lh3.googleusercontent.com/u/0/d/${driveId}`;
-    } else if (attempts === 3) {
-      // Fallback 4: Try docs.google.com/uc endpoint directly
+      // Fallback 3: Try docs.google.com/uc endpoint directly
       img.src = `https://docs.google.com/uc?export=view&id=${driveId}`;
+    } else if (attempts === 3) {
+      // Fallback 4: Try lh3 direct endpoint directly without referrer
+      img.src = `https://lh3.googleusercontent.com/d/${driveId}=s0`;
     } else {
       // Fallback 5: default inline SVG
       img.src = SVG_PLACEHOLDER;
