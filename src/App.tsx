@@ -4788,11 +4788,12 @@ function doPost(e) {
         <p className="text-[10px] text-gray-600">รันระบบจัดเก็บแถวข้อมูลสด API สะพาน Google Sheets Pro v4. ตรวจความปลอดภัยโดย AI Studio Container Engine</p>
       </footer>
     </div>
-  );
-  // ฟังก์ชันระบบอัปโหลดรูปภาพขึ้น Vercel Blob สาธารณะ
+ );
+};
+// ฟังก์ชันระบบอัปโหลดรูปภาพขึ้น Vercel Blob สาธารณะ
 function VercelBlobUploader() {
   const [uploading, setUploading] = useState(false);
- const [blobUrl, setBlobUrl] = useState('');
+  const [blobUrl, setBlobUrl] = useState('');
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
