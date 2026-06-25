@@ -1,0 +1,6 @@
+{
+  "name": "Google Sheets Connector",
+  "description": "An application to securely view, manage, and edit your Google Sheets spreadsheets with real-time updates.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
