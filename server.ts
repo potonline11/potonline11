@@ -130,12 +130,16 @@ async function startServer() {
       const response = await fetch(lh3Url, { headers: requestHeaders });
       console.log(`[DriveImageProxy] Priority 1 response status: ${response.status} ${response.statusText}`);
       if (response.ok) {
-        const contentType = response.headers.get('content-type') || 'image/jpeg';
-        res.setHeader('Content-Type', contentType);
-        res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400'); // Cache for 7 days
-        const buffer = await response.arrayBuffer();
-        console.log(`[DriveImageProxy] Priority 1 SUCCESS! Loaded ${buffer.byteLength} bytes. Content-Type: ${contentType}`);
-        return res.send(Buffer.from(buffer));
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('text/html')) {
+          console.log(`[DriveImageProxy] Priority 1 returned HTML (Google Login/Consent). Skipping...`);
+        } else {
+          res.setHeader('Content-Type', contentType || 'image/jpeg');
+          res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400'); // Cache for 7 days
+          const buffer = await response.arrayBuffer();
+          console.log(`[DriveImageProxy] Priority 1 SUCCESS! Loaded ${buffer.byteLength} bytes. Content-Type: ${contentType}`);
+          return res.send(Buffer.from(buffer));
+        }
       }
     } catch (e) {
       console.warn(`[DriveImageProxy] Priority 1 (lh3 proxy) failed for ID ${id}:`, e);
@@ -148,12 +152,16 @@ async function startServer() {
       const response = await fetch(thumbnail1600Url, { headers: requestHeaders });
       console.log(`[DriveImageProxy] Priority 2 response status: ${response.status} ${response.statusText}`);
       if (response.ok) {
-        const contentType = response.headers.get('content-type') || 'image/jpeg';
-        res.setHeader('Content-Type', contentType);
-        res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400');
-        const buffer = await response.arrayBuffer();
-        console.log(`[DriveImageProxy] Priority 2 SUCCESS! Loaded ${buffer.byteLength} bytes. Content-Type: ${contentType}`);
-        return res.send(Buffer.from(buffer));
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('text/html')) {
+          console.log(`[DriveImageProxy] Priority 2 returned HTML (Google Login/Consent). Skipping...`);
+        } else {
+          res.setHeader('Content-Type', contentType || 'image/jpeg');
+          res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400');
+          const buffer = await response.arrayBuffer();
+          console.log(`[DriveImageProxy] Priority 2 SUCCESS! Loaded ${buffer.byteLength} bytes. Content-Type: ${contentType}`);
+          return res.send(Buffer.from(buffer));
+        }
       }
     } catch (e) {
       console.warn(`[DriveImageProxy] Priority 2 (thumbnail w1600 proxy) failed for ID ${id}:`, e);
@@ -166,12 +174,16 @@ async function startServer() {
       const response = await fetch(thumbnail800Url, { headers: requestHeaders });
       console.log(`[DriveImageProxy] Priority 3 response status: ${response.status} ${response.statusText}`);
       if (response.ok) {
-        const contentType = response.headers.get('content-type') || 'image/jpeg';
-        res.setHeader('Content-Type', contentType);
-        res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400');
-        const buffer = await response.arrayBuffer();
-        console.log(`[DriveImageProxy] Priority 3 SUCCESS! Loaded ${buffer.byteLength} bytes. Content-Type: ${contentType}`);
-        return res.send(Buffer.from(buffer));
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('text/html')) {
+          console.log(`[DriveImageProxy] Priority 3 returned HTML (Google Login/Consent). Skipping...`);
+        } else {
+          res.setHeader('Content-Type', contentType || 'image/jpeg');
+          res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400');
+          const buffer = await response.arrayBuffer();
+          console.log(`[DriveImageProxy] Priority 3 SUCCESS! Loaded ${buffer.byteLength} bytes. Content-Type: ${contentType}`);
+          return res.send(Buffer.from(buffer));
+        }
       }
     } catch (e) {
       console.warn(`[DriveImageProxy] Priority 3 (thumbnail w800 proxy) failed for ID ${id}:`, e);
@@ -184,12 +196,16 @@ async function startServer() {
       const response = await fetch(ucUrl, { headers: requestHeaders });
       console.log(`[DriveImageProxy] Priority 4 response status: ${response.status} ${response.statusText}`);
       if (response.ok) {
-        const contentType = response.headers.get('content-type') || 'image/jpeg';
-        res.setHeader('Content-Type', contentType);
-        res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400');
-        const buffer = await response.arrayBuffer();
-        console.log(`[DriveImageProxy] Priority 4 SUCCESS! Loaded ${buffer.byteLength} bytes. Content-Type: ${contentType}`);
-        return res.send(Buffer.from(buffer));
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('text/html')) {
+          console.log(`[DriveImageProxy] Priority 4 returned HTML (Google Login/Consent). Skipping...`);
+        } else {
+          res.setHeader('Content-Type', contentType || 'image/jpeg');
+          res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400');
+          const buffer = await response.arrayBuffer();
+          console.log(`[DriveImageProxy] Priority 4 SUCCESS! Loaded ${buffer.byteLength} bytes. Content-Type: ${contentType}`);
+          return res.send(Buffer.from(buffer));
+        }
       }
     } catch (e) {
       console.warn(`[DriveImageProxy] Priority 4 (uc proxy) failed for ID ${id}:`, e);
@@ -201,12 +217,16 @@ async function startServer() {
       const response = await fetch(lh3Url);
       console.log(`[DriveImageProxy] Priority 5 response status: ${response.status}`);
       if (response.ok) {
-        const contentType = response.headers.get('content-type') || 'image/jpeg';
-        res.setHeader('Content-Type', contentType);
-        res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400');
-        const buffer = await response.arrayBuffer();
-        console.log(`[DriveImageProxy] Priority 5 SUCCESS! Loaded ${buffer.byteLength} bytes.`);
-        return res.send(Buffer.from(buffer));
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('text/html')) {
+          console.log(`[DriveImageProxy] Priority 5 returned HTML. Skipping...`);
+        } else {
+          res.setHeader('Content-Type', contentType || 'image/jpeg');
+          res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400');
+          const buffer = await response.arrayBuffer();
+          console.log(`[DriveImageProxy] Priority 5 SUCCESS! Loaded ${buffer.byteLength} bytes.`);
+          return res.send(Buffer.from(buffer));
+        }
       }
     } catch (e) {
       console.warn(`[DriveImageProxy] Priority 5 failed for ID ${id}:`, e);
@@ -215,7 +235,7 @@ async function startServer() {
     // If all proxy methods fail, redirect to the highly reliable wsrv.nl CDN proxy
     // This strips Referer headers and handles CDN caching, bypassing any 403 blocks on potnuengshop.com
     console.error(`[DriveImageProxy] All proxy methods failed to fetch Google Drive image ${id}. Redirecting to wsrv.nl...`);
-    res.redirect(`https://wsrv.nl/?url=${encodeURIComponent(`https://lh3.googleusercontent.com/d/${id}=s0`)}`);
+    res.redirect(`https://wsrv.nl/?url=${encodeURIComponent(`https://docs.google.com/uc?export=download&id=${id}`)}`);
   });
 
   // API Route for ZIP downloads - runs in both development and production (Shared builds)
