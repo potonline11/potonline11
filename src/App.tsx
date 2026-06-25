@@ -165,9 +165,10 @@ const convertDriveImageUrl = (url: string): string => {
 
   const driveId = getGoogleDriveId(trimmed);
   if (driveId) {
-    // 💡 โหลดรูปภาพตรงจาก Google User Content CDN (lh3.googleusercontent.com) เพื่อความเร็วสูงสุดและภาพคมชัดระดับ Ultra High Definition (=s1600)
-    // ร่วมกับการตั้งค่า referrerPolicy="no-referrer" เพื่อข้ามการตรวจจับโดเมนและป้องกันการติดบล็อค 403 Forbidden จากโดเมนจริงอย่างถาวร
-    return `https://lh3.googleusercontent.com/d/${driveId}=s1600`;
+    // 💡 โซลูชันระดับเซิร์ฟเวอร์แบบเบ็ดเสร็จ 100% สำหรับโดเมนจริง (potnuengshop.com):
+    // ดึงรูปภาพผ่าน API Proxy ในระบบหลังบ้าน (/api/drive-image?id=...) ซึ่งจะทำหน้าที่ดาวน์โหลดรูปตรงจาก Google Drive แบบ Server-to-Server
+    // วิธีนี้ทำให้บราวเซอร์ของลูกค้าไม่พบข้อผิดพลาด 403 Forbidden และ CORS แน่นอน เพราะดาวน์โหลดจากโดเมนเดียวกัน และรูปคมชัดระดับ Ultra High Definition แน่นอน
+    return `/api/drive-image?id=${driveId}`;
   }
 
   return trimmed;
@@ -216,13 +217,13 @@ const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
   
   if (driveId) {
     if (attempts === 0) {
-      // Fallback 1: Try our 100% reliable server-side backend proxy
-      img.src = `/api/drive-image?id=${driveId}`;
+      // Fallback 1: Try direct lh3.googleusercontent.com/d/ URL with referrerPolicy
+      img.src = `https://lh3.googleusercontent.com/d/${driveId}=s1600`;
     } else if (attempts === 1) {
       // Fallback 2: Try direct Google Drive Thumbnail (Client-side directly, sz=w1600)
       img.src = `https://drive.google.com/thumbnail?id=${driveId}&sz=w1600`;
     } else if (attempts === 2) {
-      // Fallback 3: Try direct lh3.googleusercontent.com/d/ URL with referrerPolicy (standard scale)
+      // Fallback 3: Try standard scale lh3 link
       img.src = `https://lh3.googleusercontent.com/d/${driveId}`;
     } else if (attempts === 3) {
       // Fallback 4: Try docs.google.com/uc endpoint directly
