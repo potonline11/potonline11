@@ -5,7 +5,8 @@ import fs from 'fs';
 import JSZip from 'jszip';
 import { createServer as createViteServer } from 'vite';
 import { fileURLToPath } from 'url';
-import { put } from '@vercel/blob';
+import { put, handleUpload } from '@vercel/blob';
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -105,33 +106,28 @@ async function startServer() {
       res.status(500).json({ error: String(error) });
     }
   });
-// Vercel Blob API Endpoint รูปแบบ FormData รองรับไฟล์ผ่านเซิร์ฟเวอร์ร้อยเปอร์เซ็นต์
+// API สำหรับสร้างรหัสผ่านชั่วคราวให้หน้าบ้านส่งรูปเข้าคลังได้โดยตรงและปลอดภัย
 app.post('/api/upload', async (req, res) => {
   try {
-    const filename = (req.query.filename as string) || 'image.png';
-    let chunks: Buffer[] = [];
-
-    // ดักจับกระแสข้อมูลรูปภาพดิบที่วิ่งเข้ามาในระบบหลังบ้าน
-    req.on('data', (chunk) => chunks.push(chunk));
-    req.on('end', async () => {
-      try {
-        const fileBuffer = Buffer.concat(chunks);
-        
-        // สั่งอัปโหลดข้อมูลรูปภาพดิบขึ้นคลัง Vercel Blob
-        const blob = await put(filename, fileBuffer, {
-          access: 'public',
-        });
-        
-        return res.json(blob);
-      } catch (uploadError: any) {
-        return res.status(500).json({ error: uploadError.message });
-      }
+    const jsonResponse = await handleUpload({
+      body: req.body,
+      request: req,
+      onBeforeGenerateToken: async (pathname) => {
+        return {
+          allowedContentTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+          maximumSizeInBytes: 10 * 1024 * 1024, // จำกัดขนาดภาพไม่เกิน 10MB
+        };
+      },
+      onUploadCompleted: async ({ blob, tokenPayload }) => {
+        console.log('อัปโหลดไฟล์สำเร็จ:', blob.url);
+      },
     });
+
+    return res.json(jsonResponse);
   } catch (error: any) {
-    return res.status(500).json({ error: error.message });
+    return res.status(400).json({ error: error.message });
   }
 });
-
 
   
   // API Route to proxy Google Drive images server-side to avoid cross-origin cookie / block issues
