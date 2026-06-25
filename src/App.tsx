@@ -4759,7 +4759,6 @@ function doPost(e) {
               )}
 
             </div>
-
             {/* Modal Actions Footer */}
             <div className="flex justify-between items-center bg-[#070b13] px-6 py-4 border-t border-gray-850" id="unlock-modal-footer">
               <span className="text-[10px] text-gray-500 select-none flex items-center gap-1.5 font-light">
@@ -4780,12 +4779,78 @@ function doPost(e) {
           </div>
         </div>
       )}
-
-      {/* Global Interactive Page Footer */}
+    <div className="max-w-4xl mx-auto px-4">
+      <VercelBlobUploader />
+    </div>
+          {/* Global Interactive Page Footer */}
       <footer className="mt-auto bg-[#0b101c] border-t border-gray-850 py-5 select-none text-center text-xs text-gray-500 leading-relaxed font-sans">
         <p className="font-semibold text-gray-450">&copy; 2026 HUB FREE - พอร์ทัลหนังและคลังซอฟต์แวร์เสรี แหล่งบันเจิดสวรรค์ของนักพัฒนา</p>
         <p className="text-[10px] text-gray-600">รันระบบจัดเก็บแถวข้อมูลสด API สะพาน Google Sheets Pro v4. ตรวจความปลอดภัยโดย AI Studio Container Engine</p>
       </footer>
+    </div>
+  );
+  // ฟังก์ชันระบบอัปโหลดรูปภาพขึ้น Vercel Blob สาธารณะ
+export function VercelBlobUploader() {
+  const [uploading, setUploading] = React.useState(false);
+  const [blobUrl, setBlobUrl] = React.useState('');
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    setBlobUrl('');
+
+    try {
+      const response = await fetch(`/api/upload?filename=${encodeURIComponent(file.name)}`, {
+        method: 'POST',
+        body: file,
+      });
+
+      if (!response.ok) throw new Error('Upload failed');
+
+      const data = await response.json();
+      if (data.url) {
+        setBlobUrl(data.url);
+        alert('อัปโหลดขึ้น Vercel Blob สำเร็จแล้วครับ!');
+      }
+    } catch (error) {
+      console.error(error);
+      alert('เกิดข้อผิดพลาดในการอัปโหลดรูปภาพ');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="p-5 border-2 border-dashed border-gray-300 rounded-lg my-5 bg-gray-50 text-gray-800">
+      <h3 className="text-lg font-bold mb-1">📷 ระบบอัปโหลดรูปภาพแบนเนอร์ (Vercel Blob)</h3>
+      <p className="text-xs text-gray-500 mb-3">เลือกไฟล์รูปภาพเพื่อรับลิงก์ URL ไปใส่ในช่อง bannerImage ของ Google Sheets</p>
+      
+      <input 
+        type="file" 
+        accept="image/*" 
+        onChange={handleFileChange} 
+        disabled={uploading}
+        className="block my-3"
+      />
+      
+      {uploading && <p className="text-blue-600 font-bold text-sm">กำลังอัปโหลดรูปภาพ โปรดรอสักครู่...</p>}
+      
+      {blobUrl && (
+        <div className="mt-4 bg-white p-3 rounded border border-gray-200">
+          <p className="text-sm text-green-600 font-bold mb-1">อัปโหลดเสร็จเรียบร้อย! คัดลอกลิงก์ด้านล่างนี้ได้เลย:</p>
+          <input 
+            type="text" 
+            value={blobUrl} 
+            readOnly 
+            onClick={(e) => (e.target as HTMLInputElement).select()}
+            className="w-full p-2 border border-blue-500 rounded bg-blue-50 cursor-pointer text-sm"
+          />
+          <p className="text-xs text-gray-400 mt-1">* คลิกที่ช่องข้อความด้านบนเพื่อเลือกทั้งหมด แล้วกดคัดลอกได้เลย</p>
+          <img src={blobUrl} alt="Preview" className="max-w-[150px] max-h-[150px] mt-3 block rounded" />
+        </div>
+      )}
     </div>
   );
 }
