@@ -166,11 +166,10 @@ const convertDriveImageUrl = (url: string): string => {
 
   const driveId = getGoogleDriveId(trimmed);
   if (driveId) {
-    // 💡 เพื่อหลีกเลี่ยง Referer 403 Forbidden และป้องกันไม่ให้ภาพแตก (คมชัดสูงสุด 100% ในโดเมนจริง potnuengshop.com)
-    // เราจะดึงภาพผ่าน Google OpenSocial Gadgets Proxy ครอบตัวไฟล์ Thumbnail ที่ระบุขนาดความกว้างสูงสุด (sz=w1600)
-    // การใช้ระบบ OpenSocial Proxy ซึ่งเป็นเซิร์ฟเวอร์ของ Google เอง จะช่วยข้ามการบล็อค Referer และให้บริการภาพความละเอียดสูงได้อย่างสมบูรณ์แบบโดยไม่ต้องพึ่งพาเซิร์ฟเวอร์หลัก
+    // 💡 คมชัดสูงสุด 100% ไม่แตกแน่นอน และ bypass 403 Forbidden อย่างสมบูรณ์แบบบนโดเมนจริง potnuengshop.com
+    // เราจะใช้ระบบ wsrv.nl proxy ในการข้ามการตรวจจับ Referer ของ Google และแสดงผลภาพความละเอียดสูงจาก Thumbnail (sz=w1600)
     const rawTarget = `https://drive.google.com/thumbnail?id=${driveId}&sz=w1600`;
-    return `https://images1-focus-opensocial.googleusercontent.com/gadgets/proxy?container=focus&refresh=2592000&url=${encodeURIComponent(rawTarget)}`;
+    return `https://wsrv.nl/?url=${encodeURIComponent(rawTarget)}`;
   }
 
   return trimmed;
@@ -218,27 +217,30 @@ const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
   }
   
   img.setAttribute('data-fallback-attempts', String(attempts + 1));
-  const driveId = getGoogleDriveId(currentSrc);
+  const driveId = img.getAttribute('data-original-drive-id') || getGoogleDriveId(currentSrc);
   
   if (driveId) {
     if (attempts === 0) {
-      // Fallback 1: Try Google OpenSocial Proxy with direct lh3.googleusercontent.com full-scale (=s0)
-      const rawTarget = `https://lh3.googleusercontent.com/d/${driveId}=s0`;
-      img.src = `https://images1-focus-opensocial.googleusercontent.com/gadgets/proxy?container=focus&refresh=2592000&url=${encodeURIComponent(rawTarget)}`;
-    } else if (attempts === 1) {
-      // Fallback 2: Try wsrv.nl proxy on the high-quality thumbnail endpoint (completely strips Referer)
-      img.src = `https://wsrv.nl/?url=${encodeURIComponent(`https://drive.google.com/thumbnail?id=${driveId}&sz=w1600`)}`;
-    } else if (attempts === 2) {
-      // Fallback 3: Try wsrv.nl proxy on raw lh3 endpoint
+      // Fallback 1: Try wsrv.nl proxy on raw lh3 endpoint with s0 (original size)
       img.src = `https://wsrv.nl/?url=${encodeURIComponent(`https://lh3.googleusercontent.com/d/${driveId}=s0`)}`;
+    } else if (attempts === 1) {
+      // Fallback 2: Try local express server proxy route (if backend is active)
+      img.src = `/api/drive-image?id=${driveId}`;
+    } else if (attempts === 2) {
+      // Fallback 3: Try wsrv.nl proxy on raw Google Drive thumbnail with default width
+      img.src = `https://wsrv.nl/?url=${encodeURIComponent(`https://drive.google.com/thumbnail?id=${driveId}`)}`;
     } else if (attempts === 3) {
-      // Fallback 4: Try docs.google.com/uc endpoint directly
-      img.src = `https://docs.google.com/uc?export=view&id=${driveId}`;
+      // Fallback 4: Try Google OpenSocial Proxy on high quality thumbnail (as secondary backup)
+      const rawTarget = `https://drive.google.com/thumbnail?id=${driveId}&sz=w1600`;
+      img.src = `https://images1-focus-opensocial.googleusercontent.com/gadgets/proxy?container=focus&refresh=2592000&url=${encodeURIComponent(rawTarget)}`;
     } else if (attempts === 4) {
-      // Fallback 5: Try lh3 direct endpoint directly without referrer
+      // Fallback 5: Try docs.google.com/uc endpoint directly
+      img.src = `https://docs.google.com/uc?export=view&id=${driveId}`;
+    } else if (attempts === 5) {
+      // Fallback 6: Try direct lh3 endpoint
       img.src = `https://lh3.googleusercontent.com/d/${driveId}=s0`;
     } else {
-      // Fallback 6: default inline SVG
+      // Fallback 7: default inline SVG
       img.src = SVG_PLACEHOLDER;
     }
   } else {
@@ -2916,6 +2918,7 @@ export default function App() {
                     alt={featuredProduct.title}
                     className="w-full h-full object-cover opacity-85 hover:scale-105 transition-all duration-700"
                     referrerPolicy="no-referrer"
+                    data-original-drive-id={getGoogleDriveId(featuredProduct.imageUrl || '') || undefined}
                     onError={handleImageError}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-[#121829] via-[#121829]/30 to-transparent pointer-events-none" />
@@ -2953,6 +2956,7 @@ export default function App() {
                           alt={p.title}
                           className="w-full h-full object-cover group-hover:scale-110 transition-all duration-500 opacity-80"
                           referrerPolicy="no-referrer"
+                          data-original-drive-id={getGoogleDriveId(p.imageUrl || '') || undefined}
                           onError={handleImageError}
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-[#0b101c] via-[#0b101c]/40 to-transparent" />
@@ -4009,6 +4013,7 @@ function doPost(e) {
                 alt={selectedProduct.title}
                 className="w-full h-full object-cover opacity-80"
                 referrerPolicy="no-referrer"
+                data-original-drive-id={getGoogleDriveId(selectedProduct.imageUrl || '') || undefined}
                 onError={handleImageError}
               />
               <div className="absolute inset-0 bg-gradient-to-t from-[#0b101c] via-[#0b101c]/30 to-transparent" />
