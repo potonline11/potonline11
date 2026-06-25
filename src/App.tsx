@@ -4837,8 +4837,7 @@ function VercelBlobUploader() {
       />
       
       {uploading && <p className="text-blue-600 font-bold text-sm">กำลังอัปโหลดรูปภาพ โปรดรอสักครู่...</p>}
-      
-           {blobUrl && (
+            {blobUrl && (
         <div style={{ marginTop: '20px', background: '#fff', padding: '15px', borderRadius: '6px', border: '2px solid #0070f3', display: 'block' }}>
           <p style={{ margin: '0 0 8px 0', color: '#008000', fontWeight: 'bold', fontSize: '15px' }}>
             🎉 อัปโหลดสำเร็จ! คัดลอกลิงก์ด้านล่างนี้ได้เลย:
@@ -4855,7 +4854,8 @@ function VercelBlobUploader() {
           </p>
           <img src={blobUrl} alt="Preview" style={{ maxWidth: '100%', maxHeight: '150px', marginTop: '15px', display: 'block', borderRadius: '4px' }} />
         </div>
-  
+      )}
     </div>
   );
 }
+
