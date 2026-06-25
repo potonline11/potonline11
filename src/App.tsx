@@ -177,9 +177,9 @@ const convertDriveImageUrl = (url: string): string => {
       // สำหรับในระบบ preview / local: ใช้ Express backend proxy ตัวเองดีที่สุด
       return `/api/drive-image?id=${driveId}`;
     } else {
-      // สำหรับระบบจริง (เช่น potnuengshop.com): ใช้ Google Thumbnail API แท้ๆ ความละเอียดสูง (sz=w1600) ยิงตรงจาก CDN Google
-      // วิธีนี้เร็วที่สุด 100% ไม่ติดบล็อก Referer 403 และไม่ต้องผ่านบริการ Proxy ค่ายอื่นที่เสี่ยงล่มหรือโหลดช้าเนื่องจากขนาดไฟล์
-      return `https://drive.google.com/thumbnail?id=${driveId}&sz=w1600`;
+      // สำหรับระบบจริง (เช่น potnuengshop.com): ใช้ WordPress Photon CDN ในการดึงและแคชภาพความละเอียดสูงทันที
+      // วิธีนี้เร็วที่สุด 100% ป้องกัน Referer 403 บล็อก และรองรับโหลดหนักได้ดีเยี่ยมผ่าน Automattic CDN
+      return `https://i0.wp.com/lh3.googleusercontent.com/d/${driveId}=s0`;
     }
   }
 
@@ -233,27 +233,37 @@ const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
   if (driveId) {
     // ลิสต์ Proxy สำรองความพร้อมใช้งานสูง (High-Availability CDN Proxies)
     const fallbacks = [
-      // ลำดับที่ 1: Google Thumbnail API แท้ ความละเอียดสูง w1600 (ตรงและเสถียรที่สุด)
-      `https://drive.google.com/thumbnail?id=${driveId}&sz=w1600`,
+      // ลำดับที่ 1: WordPress Jetpack/Photon CDN ช่วยแคชและดึงผ่านโดเมนย่อยของ Automattic ปลอดภัยต่อ Referer Block 100%
+      `https://i0.wp.com/lh3.googleusercontent.com/d/${driveId}=s0`,
       // ลำดับที่ 2: Google OpenSocial Gadgets Proxy ครอบดึงรูป thumbnail w1600 อีกชั้นเพื่อเลี่ยง Referer และแคชของ ISP
       `https://images1-focus-opensocial.googleusercontent.com/gadgets/proxy?container=focus&refresh=2592000&url=${encodeURIComponent(`https://drive.google.com/thumbnail?id=${driveId}&sz=w1600`)}`,
-      // ลำดับที่ 3: wsrv.nl ครอบรูป thumbnail เผื่อต้องการฟังก์ชันบีบอัด CDN ภายนอก
-      `https://wsrv.nl/?url=${encodeURIComponent(`https://drive.google.com/thumbnail?id=${driveId}&sz=w1600`)}`,
-      // ลำดับที่ 4: WordPress Jetpack/Photon CDN ช่วยแคชและดึงผ่านโดเมนย่อยของ Automattic
-      `https://i0.wp.com/lh3.googleusercontent.com/d/${driveId}=s0`,
-      // ลำดับที่ 5: wsrv.nl ครอบดึงรูป lh3 ดั้งเดิม
+      // ลำดับที่ 3: wsrv.nl ครอบดึงรูป lh3 ดั้งเดิมแบบไม่มีความละเอียดสูงสุด
       `https://wsrv.nl/?url=${encodeURIComponent(`https://lh3.googleusercontent.com/d/${driveId}=s0`)}`,
+      // ลำดับที่ 4: รูปภาพสำรองจาก API ตัวเองเผื่ออยู่บนเซิร์ฟเวอร์แบบ full stack
+      `/api/drive-image?id=${driveId}`,
+      // ลำดับที่ 5: Google Thumbnail API แท้ ความละเอียดสูง w1600 (ตรงที่สุด)
+      `https://drive.google.com/thumbnail?id=${driveId}&sz=w1600`,
       // ลำดับที่ 6: Google docs export view ดึงตรงจากหน้าเอกสารดาวน์โหลด
       `https://docs.google.com/uc?export=view&id=${driveId}`,
       // ลำดับที่ 7: ลิงก์ตรงแบบย่อส่วน lh3.googleusercontent
       `https://lh3.googleusercontent.com/d/${driveId}=w800`,
-      // ลำดับที่ 8: รูปภาพสำรองจาก API ตัวเองเผื่ออยู่บนเซิร์ฟเวอร์แบบ full stack
-      `/api/drive-image?id=${driveId}`,
-      // ลำดับที่ 9: SVG Placeholder ดั้งเดิมเพื่อความสมบูรณ์แบบ
+      // ลำดับที่ 8: SVG Placeholder เพื่อเป็นทางเลือกสุดท้าย
       SVG_PLACEHOLDER
     ];
 
-    const nextSrc = fallbacks[attempts % fallbacks.length];
+    // กรองหาตัวถัดไปที่ไม่ซ้ำกับรูปภาพที่เพิ่งเกิด Error (ป้องกัน Infinite retrying URL เดิม)
+    const activeFallbacks = fallbacks.filter(f => {
+      if (f === currentSrc) return false;
+      try {
+        const url1 = new URL(f, window.location.href).href;
+        const url2 = new URL(currentSrc, window.location.href).href;
+        return url1 !== url2;
+      } catch (e) {
+        return f !== currentSrc;
+      }
+    });
+
+    const nextSrc = activeFallbacks[attempts % activeFallbacks.length] || SVG_PLACEHOLDER;
     console.log(`[GoogleDriveProxy] Fallback triggered. Attempt: ${attempts + 1}, Next Src: ${nextSrc}`);
     img.src = nextSrc;
   } else {
