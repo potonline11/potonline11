@@ -4790,9 +4790,9 @@ function doPost(e) {
     </div>
   );
   // ฟังก์ชันระบบอัปโหลดรูปภาพขึ้น Vercel Blob สาธารณะ
-export function VercelBlobUploader() {
-  const [uploading, setUploading] = React.useState(false);
-  const [blobUrl, setBlobUrl] = React.useState('');
+function VercelBlobUploader() {
+  const [uploading, setUploading] = useState(false);
+ const [blobUrl, setBlobUrl] = useState('');
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
