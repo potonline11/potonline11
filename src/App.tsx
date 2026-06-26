@@ -85,10 +85,25 @@ import {
 } from 'lucide-react';
 
 
-// Helper to find column index loosely matching options list
+// Helper to find column index loosely matching options list with exact priority to avoid substring conflicts
 const findHeaderIndex = (headers: string[], options: string[]): number => {
-  return headers.findIndex((h) => 
-    options.some((opt) => h.includes(opt.toLowerCase()) || opt.toLowerCase().includes(h))
+  const lowerHeaders = headers.map((h) => (h ? h.toLowerCase().trim() : ''));
+  const lowerOptions = options.map((opt) => (opt ? opt.toLowerCase().trim() : ''));
+
+  // 1. Try exact match first (highly accurate, avoids conflicts like "รายละเอียด" matching "รายละเอียดเจาะลึก")
+  const exactIdx = lowerHeaders.findIndex((h) => h && lowerOptions.includes(h));
+  if (exactIdx !== -1) return exactIdx;
+
+  // 2. Try clean exact match (ignoring spaces, underscores, dashes)
+  const cleanStr = (s: string) => s.replace(/[-_\s]/g, '');
+  const cleanHeaders = lowerHeaders.map(cleanStr);
+  const cleanOptions = lowerOptions.map(cleanStr);
+  const cleanExactIdx = cleanHeaders.findIndex((h) => h && cleanOptions.includes(h));
+  if (cleanExactIdx !== -1) return cleanExactIdx;
+
+  // 3. Fallback to loose match (header includes option, or option includes header with safe length)
+  return lowerHeaders.findIndex((h) => 
+    h && lowerOptions.some((opt) => h.includes(opt) || (opt.includes(h) && h.length >= 4))
   );
 };
 
