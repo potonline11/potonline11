@@ -1,4 +1,3 @@
-import { upload } from '@vercel/blob/client';
 import React, { useState, useEffect, useCallback, useMemo, startTransition, FormEvent } from 'react';
 import { User } from 'firebase/auth';
 import JSZip from 'jszip';
@@ -161,7 +160,7 @@ const convertDriveImageUrl = (url: string): string => {
       const srcUrl = srcMatch[1].trim();
       const driveId = getGoogleDriveId(srcUrl);
       if (driveId) {
-        return `https://wsrv.nl/?url=${encodeURIComponent(`https://docs.google.com/uc?export=download&id=${driveId}`)}`;
+        return `https://wsrv.nl/?url=${encodeURIComponent(`https://lh3.googleusercontent.com/d/${driveId}=s0`)}`;
       }
       return srcUrl;
     }
@@ -180,8 +179,8 @@ const convertDriveImageUrl = (url: string): string => {
 
   const driveId = getGoogleDriveId(trimmed);
   if (driveId) {
-    // ใช้ wsrv.nl CDN Proxy มั่นใจได้ว่าเสถียรที่สุด 100% บนหน้าเว็บ potnuengshop.com โดยไม่ติดปัญหา Referer Check และไม่ต้องใช้ Express server
-    return `https://wsrv.nl/?url=${encodeURIComponent(`https://docs.google.com/uc?export=download&id=${driveId}`)}`;
+    // ใช้ wsrv.nl ครอบ lh3.googleusercontent.com เพื่อความปลอดภัยและเสถียรภาพสูงสุด 100% บนทุกโดเมน (ทั้งโดเมนหลักและรอง)
+    return `https://wsrv.nl/?url=${encodeURIComponent(`https://lh3.googleusercontent.com/d/${driveId}=s0`)}`;
   }
 
   return trimmed;
@@ -234,17 +233,19 @@ const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
   if (driveId) {
     // ลิสต์ Proxy สำรองความพร้อมใช้งานสูง (High-Availability CDN Proxies)
     const fallbacks = [
-      // ลำดับที่ 1: ใช้ wsrv.nl ครอบดึงจาก Google Docs uc download เพื่อล้าง referer/cookies (เสถียรที่สุดสำหรับเว็บ Static อย่าง potnuengshop.com)
-      `https://wsrv.nl/?url=${encodeURIComponent(`https://docs.google.com/uc?export=download&id=${driveId}`)}`,
-      // ลำดับที่ 2: ใช้ wsrv.nl ครอบดึง lh3.googleusercontent.com เพื่อทำความสะอาด headers/referer และแคชความเร็วสูง
+      // ลำดับที่ 1: ใช้ wsrv.nl ครอบ lh3.googleusercontent.com เสถียรและแคชภาพเร็วที่สุดโดยไม่ติด Referer Block บนทุกโดเมน
       `https://wsrv.nl/?url=${encodeURIComponent(`https://lh3.googleusercontent.com/d/${driveId}=s0`)}`,
-      // ลำดับที่ 3: WordPress Jetpack/Photon CDN ช่วยแคชรูปภาพผ่านเซิร์ฟเวอร์ความเร็วสูง (ไม่ต้องผ่าน Express Backend ของเรา)
+      // ลำดับที่ 2: WordPress Jetpack/Photon CDN ช่วยแคชรูปภาพผ่านเซิร์ฟเวอร์ความเร็วสูง
       `https://i0.wp.com/lh3.googleusercontent.com/d/${driveId}=s0`,
-      // ลำดับที่ 4: ใช้ Express backend proxy เผื่อรันอยู่บน Full-Stack Server เติมเต็มความปลอดภัย
+      // ลำดับที่ 3: ใช้ wsrv.nl ครอบดึง Google Thumbnail ความละเอียดสูง
+      `https://wsrv.nl/?url=${encodeURIComponent(`https://drive.google.com/thumbnail?id=${driveId}&sz=w1200`)}`,
+      // ลำดับที่ 4: Google User Content d/ (ดึงแบบดิบๆ)
+      `https://lh3.googleusercontent.com/d/${driveId}=s0`,
+      // ลำดับที่ 5: Google Thumbnail API แท้ ความละเอียดสูง w1200 (ตรงที่สุด ไม่ผ่าน proxy ใดๆ)
+      `https://drive.google.com/thumbnail?id=${driveId}&sz=w1200`,
+      // ลำดับที่ 6: ใช้ Express backend proxy เผื่อรันอยู่บน Full-Stack Server เติมเต็มความปลอดภัย
       `/api/drive-image?id=${driveId}`,
-      // ลำดับที่ 5: Google Thumbnail API แท้ ความละเอียดสูง w1600 (ตรงที่สุด)
-      `https://drive.google.com/thumbnail?id=${driveId}&sz=w1600`,
-      // ลำดับที่ 6: SVG Placeholder เพื่อเป็นทางเลือกสุดท้าย
+      // ลำดับที่ 7: SVG Placeholder เพื่อเป็นทางเลือกสุดท้าย
       SVG_PLACEHOLDER
     ];
 
@@ -732,6 +733,25 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [needsAuth, setNeedsAuth] = useState(true);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  // Check if admin mode is active (either via query parameter ?admin=true, local storage, or logged-in user state)
+  const [isAdminMode, setIsAdminMode] = useState<boolean>(() => {
+    const hasAdminQuery = new URLSearchParams(window.location.search).get('admin') === 'true';
+    const savedAdminMode = localStorage.getItem('hubfree_admin_mode') === 'true';
+    if (hasAdminQuery) {
+      localStorage.setItem('hubfree_admin_mode', 'true');
+      return true;
+    }
+    return savedAdminMode;
+  });
+
+  // Ensure admin mode is activated when user is logged in
+  useEffect(() => {
+    if (user) {
+      setIsAdminMode(true);
+      localStorage.setItem('hubfree_admin_mode', 'true');
+    }
+  }, [user]);
 
   // Connection Mode: Starts with Sandbox, user can toggle to Google Sheets Cloud Mode
   const [isCloudMode, setIsCloudMode] = useState<boolean>(() => {
@@ -1340,6 +1360,36 @@ export default function App() {
     }
   }, [activeWorksheet]);
 
+  // Synchronize active spreadsheet configuration to the server whenever they are changed by the logged-in admin
+  useEffect(() => {
+    if (user && activeSpreadsheetId) {
+      const saveServerConfig = async () => {
+        try {
+          const body = {
+            DEFAULT_SPREADSHEET_ID: activeSpreadsheetId || '',
+            DEFAULT_SPREADSHEET_NAME: activeSpreadsheetName || '',
+            DEFAULT_WORKSHEET: activeWorksheet || '',
+            DEFAULT_APPS_SCRIPT_URL: customAppsScriptUrl || '',
+            DEFAULT_FIREBASE_CONFIG: customFirebaseJson || '',
+            DEFAULT_GOOGLE_CLIENT_ID: customClientId || '',
+            DEFAULT_IS_CLOUD_MODE: isCloudMode
+          };
+          await fetch('/api/save-config', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(body),
+          });
+          console.log('[App] Auto-saved active spreadsheet config server-side.');
+        } catch (e) {
+          console.error('[App] Failed to save active spreadsheet config to server:', e);
+        }
+      };
+      saveServerConfig();
+    }
+  }, [user, activeSpreadsheetId, activeSpreadsheetName, activeWorksheet, customAppsScriptUrl, customFirebaseJson, customClientId, isCloudMode]);
+
   useEffect(() => {
     if (worksheets && worksheets.length > 0) {
       localStorage.setItem('hubfree_cached_worksheets', JSON.stringify(worksheets));
@@ -1372,8 +1422,18 @@ export default function App() {
           
           if (data.DEFAULT_SPREADSHEET_ID && data.DEFAULT_SPREADSHEET_ID !== 'Secret value') {
             defaultSheetId = data.DEFAULT_SPREADSHEET_ID;
-            setIsCloudMode(true);
-            localStorage.setItem('hubfree_is_cloud_mode', 'true');
+            const isCloud = data.DEFAULT_IS_CLOUD_MODE !== undefined ? data.DEFAULT_IS_CLOUD_MODE : true;
+            setIsCloudMode(isCloud);
+            localStorage.setItem('hubfree_is_cloud_mode', String(isCloud));
+            
+            if (data.DEFAULT_SPREADSHEET_NAME) {
+              localStorage.setItem('hubfree_active_spreadsheet_name', data.DEFAULT_SPREADSHEET_NAME);
+              setActiveSpreadsheetName(data.DEFAULT_SPREADSHEET_NAME);
+            }
+            if (data.DEFAULT_WORKSHEET) {
+              localStorage.setItem('hubfree_active_worksheet', data.DEFAULT_WORKSHEET);
+              setActiveWorksheet(data.DEFAULT_WORKSHEET);
+            }
           }
           if (data.DEFAULT_APPS_SCRIPT_URL && data.DEFAULT_APPS_SCRIPT_URL !== 'Secret value') {
             appsScriptUrl = data.DEFAULT_APPS_SCRIPT_URL;
@@ -1395,7 +1455,8 @@ export default function App() {
         console.error('Failed to fetch API config:', e);
       }
 
-      const savedId = localStorage.getItem('hubfree_active_spreadsheet_id') || defaultSheetId;
+      // Prioritize the server-saved spreadsheet ID so visitors see the exact Google Sheet connected by the admin
+      const savedId = defaultSheetId !== 'hubfree-products-database' ? defaultSheetId : (localStorage.getItem('hubfree_active_spreadsheet_id') || defaultSheetId);
       const savedName = localStorage.getItem('hubfree_active_spreadsheet_name') || 
         (savedId === defaultSheetId && defaultSheetId !== 'hubfree-products-database' ? 'ฐานข้อมูลหลัก (Google Sheet)' : undefined);
       
@@ -1735,6 +1796,8 @@ export default function App() {
       await logoutUser();
       localStorage.removeItem('direct_google_access_token');
       localStorage.removeItem('direct_google_user');
+      localStorage.removeItem('hubfree_admin_mode');
+      setIsAdminMode(false);
       setUser(null);
       setNeedsAuth(true);
       
@@ -1919,7 +1982,7 @@ export default function App() {
           const srcUrl = srcMatch[1].trim();
           const driveId = getGoogleDriveId(srcUrl);
           if (driveId) {
-            const workingUrl = `https://wsrv.nl/?url=${encodeURIComponent(`https://docs.google.com/uc?export=download&id=${driveId}`)}`;
+            const workingUrl = `https://wsrv.nl/?url=${encodeURIComponent(`https://lh3.googleusercontent.com/d/${driveId}=s0`)}`;
             htmlImage = trimmedRaw.replace(srcMatch[1], workingUrl);
           } else {
             htmlImage = trimmedRaw;
@@ -2467,17 +2530,19 @@ export default function App() {
               <Heart className="w-3.5 h-3.5" />
               วิธีใช้ & ค่าน้ำชา
             </button>
-            <button
-              onClick={() => setActiveTab('SheetsConfig')}
-              className={`px-4 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all flex items-center gap-1.5 ${
-                activeTab === 'SheetsConfig'
-                  ? 'bg-indigo-600 text-white font-bold shadow-md shadow-indigo-600/20'
-                  : 'text-[#4f46e5] font-bold hover:bg-indigo-950/40 bg-indigo-950/15 border border-indigo-950'
-              }`}
-            >
-              <FileSpreadsheet className="w-3.5 h-3.5" />
-              เชื่อม Google Sheets
-            </button>
+            {isAdminMode && (
+              <button
+                onClick={() => setActiveTab('SheetsConfig')}
+                className={`px-4 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all flex items-center gap-1.5 ${
+                  activeTab === 'SheetsConfig'
+                    ? 'bg-indigo-600 text-white font-bold shadow-md shadow-indigo-600/20'
+                    : 'text-[#4f46e5] font-bold hover:bg-indigo-950/40 bg-indigo-950/15 border border-indigo-950'
+                }`}
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5" />
+                เชื่อม Google Sheets
+              </button>
+            )}
           </nav>
         </div>
       </header>
@@ -2486,7 +2551,7 @@ export default function App() {
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 space-y-8">
         
         {/* Conditional warning regarding Sandbox/Cloud modes */}
-        {activeTab !== 'SheetsConfig' && (
+        {isAdminMode && activeTab !== 'SheetsConfig' && (
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3 px-4 bg-gray-950 border border-gray-800 rounded-xl text-xs text-gray-400 shadow-inner">
             <div className="flex items-center gap-2">
               <span className={`w-2 h-2 rounded-full ${isCloudMode ? 'bg-emerald-500 animate-ping' : 'bg-amber-500'}`} />
@@ -3231,7 +3296,7 @@ export default function App() {
         {/* ------------------------------------------------------------- */}
         {/* VIEW 3: COMPLEX ADMIN GOOGLE SHEETS SETTINGS MANAGER 🛰️ */}
         {/* ------------------------------------------------------------- */}
-        {activeTab === 'SheetsConfig' && (
+        {activeTab === 'SheetsConfig' && isAdminMode && (
           <div className="space-y-8 animate-fadeIn" id="sheets-config-view">
             
             {/* Header Settings */}
@@ -4760,6 +4825,7 @@ function doPost(e) {
               )}
 
             </div>
+
             {/* Modal Actions Footer */}
             <div className="flex justify-between items-center bg-[#070b13] px-6 py-4 border-t border-gray-850" id="unlock-modal-footer">
               <span className="text-[10px] text-gray-500 select-none flex items-center gap-1.5 font-light">
@@ -4780,81 +4846,12 @@ function doPost(e) {
           </div>
         </div>
       )}
-    <div className="max-w-4xl mx-auto px-4">
-      <VercelBlobUploader />
-    </div>
-          {/* Global Interactive Page Footer */}
+
+      {/* Global Interactive Page Footer */}
       <footer className="mt-auto bg-[#0b101c] border-t border-gray-850 py-5 select-none text-center text-xs text-gray-500 leading-relaxed font-sans">
         <p className="font-semibold text-gray-450">&copy; 2026 HUB FREE - พอร์ทัลหนังและคลังซอฟต์แวร์เสรี แหล่งบันเจิดสวรรค์ของนักพัฒนา</p>
         <p className="text-[10px] text-gray-600">รันระบบจัดเก็บแถวข้อมูลสด API สะพาน Google Sheets Pro v4. ตรวจความปลอดภัยโดย AI Studio Container Engine</p>
       </footer>
-    </div>
- );
-};
-// ฟังก์ชันระบบอัปโหลดรูปภาพขึ้น Vercel Blob สาธารณะ
-function VercelBlobUploader() {
-  const [uploading, setUploading] = useState(false);
-  const [blobUrl, setBlobUrl] = useState('');
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setUploading(true);
-    setBlobUrl('');
-
-    try {
-      // เรียกใช้ฟังก์ชันอัจฉริยะของ Vercel ดึงไฟล์ส่งตรงเข้าคลัง noinashop ทันที
-      const newBlob = await upload(file.name, file, {
-        access: 'public',
-        handleUploadUrl: '/api/upload', // วิ่งไปขอ Token ความปลอดภัยจากหลังบ้านก่อน
-      });
-
-      if (newBlob.url) {
-        setBlobUrl(newBlob.url);
-        alert('อัปโหลดขึ้น Vercel Blob สำเร็จร้อยเปอร์เซ็นต์แล้วครับ!');
-      }
-    } catch (error) {
-      console.error(error);
-      alert('เกิดข้อผิดพลาดในการเชื่อมต่อคลังรูปภาพ');
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  return (
-    <div className="p-5 border-2 border-dashed border-gray-300 rounded-lg my-5 bg-gray-50 text-gray-800">
-      <h3 className="text-lg font-bold mb-1">📷 ระบบอัปโหลดรูปภาพแบนเนอร์ (Vercel Blob)</h3>
-      <p className="text-xs text-gray-500 mb-3">เลือกไฟล์รูปภาพเพื่อรับลิงก์ URL ไปใส่ในช่อง bannerImage ของ Google Sheets</p>
-      
-      <input 
-        type="file" 
-        accept="image/*" 
-        onChange={handleFileChange} 
-        disabled={uploading}
-        className="block my-3"
-      />
-      
-      {uploading && <p className="text-blue-600 font-bold text-sm">กำลังอัปโหลดรูปภาพ โปรดรอสักครู่...</p>}
-      
-      {blobUrl && (
-        <div style={{ marginTop: '20px', background: '#fff', padding: '15px', borderRadius: '6px', border: '2px solid #0070f3', display: 'block' }}>
-          <p style={{ margin: '0 0 8px 0', color: '#008000', fontWeight: 'bold', fontSize: '15px' }}>
-            🎉 อัปโหลดสำเร็จ! คัดลอกลิงก์ด้านล่างนี้ได้เลย:
-          </p>
-          <input 
-            type="text" 
-            value={blobUrl} 
-            readOnly 
-            onClick={(e) => (e.target as HTMLInputElement).select()}
-            style={{ width: '100%', padding: '10px', boxSizing: 'border-box', border: '1px solid #0070f3', borderRadius: '4px', background: '#f0f7ff', color: '#000', fontStyle: 'normal', fontSize: '14px', cursor: 'pointer' }}
-          />
-          <p style={{ fontSize: '12px', color: '#666', margin: '5px 0 0 0' }}>
-            * คลิกในกล่องสีฟ้าด้านบนเพื่อเลือกทั้งหมด แล้วกดคัดลอก (Copy) ไปใส่ใน Google Sheets
-          </p>
-          <img src={blobUrl} alt="Preview" style={{ maxWidth: '100%', maxHeight: '150px', marginTop: '15px', display: 'block', borderRadius: '4px' }} />
-        </div>
-      )}
     </div>
   );
 }

@@ -5,8 +5,6 @@ import fs from 'fs';
 import JSZip from 'jszip';
 import { createServer as createViteServer } from 'vite';
 import { fileURLToPath } from 'url';
-import { put, handleUpload } from '@vercel/blob';
-
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -95,18 +93,43 @@ async function startServer() {
   // API Route to fetch runtime environment variables for the frontend
   app.get('/api/config', (req, res) => {
     try {
+      let savedConfig = {};
+      const configPath = path.join(process.cwd(), 'active_sheet.json');
+      if (fs.existsSync(configPath)) {
+        try {
+          savedConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        } catch (e) {
+          console.error('Error parsing active_sheet.json:', e);
+        }
+      }
+
       res.json({
         DEFAULT_SPREADSHEET_ID: process.env.VITE_DEFAULT_SPREADSHEET_ID || process.env.DEFAULT_SPREADSHEET_ID || '',
         DEFAULT_APPS_SCRIPT_URL: process.env.VITE_DEFAULT_APPS_SCRIPT_URL || process.env.DEFAULT_APPS_SCRIPT_URL || '',
         DEFAULT_FIREBASE_CONFIG: process.env.VITE_DEFAULT_FIREBASE_CONFIG || process.env.DEFAULT_FIREBASE_CONFIG || '',
         DEFAULT_GOOGLE_CLIENT_ID: process.env.VITE_DEFAULT_GOOGLE_CLIENT_ID || process.env.DEFAULT_GOOGLE_CLIENT_ID || '',
+        ...savedConfig
       });
     } catch (error) {
       console.error('Error fetching config:', error);
       res.status(500).json({ error: String(error) });
     }
   });
-  
+
+  // API Route to save the active Google Sheet configuration server-side
+  app.post('/api/save-config', express.json(), (req, res) => {
+    try {
+      const config = req.body;
+      const configPath = path.join(process.cwd(), 'active_sheet.json');
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+      console.log('[Server] Successfully saved active spreadsheet config server-side:', config);
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error saving active spreadsheet config:', error);
+      res.status(500).json({ error: String(error) });
+    }
+  });
+
   // API Route to proxy Google Drive images server-side to avoid cross-origin cookie / block issues
   app.get('/api/drive-image', async (req, res) => {
     const { id } = req.query;
