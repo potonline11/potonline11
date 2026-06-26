@@ -720,8 +720,8 @@ const MOVIE_SUBCATEGORIES = [
 // - เพื่อให้ผู้เยี่ยมชมเว็บทั่วไป (Public Visitors) สามารถดึงข้อมูลจริงจาก Google Sheets ของคุณไปแสดงผลได้ทันที
 // - กรุณาตรวจสอบให้แน่ใจว่าได้แชร์ไฟล์ Google Sheets เป็น "ทุกคนที่มีลิงก์มีสิทธิ์อ่าน" (Anyone with the link can view)
 // - สามารถระบุค่าเหล่านี้เพื่อฝังเป็นค่าเริ่มต้นถาวรของเว็บไซต์ได้เลย หรือกำหนดผ่าน Environment Variables ในระบบโฮสติ้ง เช่น Vercel
-export const GLOBAL_DEFAULT_SPREADSHEET_ID = ((import.meta as any).env?.VITE_DEFAULT_SPREADSHEET_ID) || ''; // วาง ID ของ Google Sheets เริ่มต้นตรงนี้ (หรือใช้ VITE_DEFAULT_SPREADSHEET_ID ใน Vercel)
-export const GLOBAL_DEFAULT_APPS_SCRIPT_URL = ((import.meta as any).env?.VITE_DEFAULT_APPS_SCRIPT_URL) || ''; // วาง Google Apps Script Web App URL เริ่มต้นตรงนี้
+export const GLOBAL_DEFAULT_SPREADSHEET_ID = ((import.meta as any).env?.VITE_DEFAULT_SPREADSHEET_ID) || '1hi9o6Ek7cnGXpNOmu159fqGOxwPodWrVZoCcpZ7gjWw'; // วาง ID ของ Google Sheets เริ่มต้นตรงนี้ (หรือใช้ VITE_DEFAULT_SPREADSHEET_ID ใน Vercel)
+export const GLOBAL_DEFAULT_APPS_SCRIPT_URL = ((import.meta as any).env?.VITE_DEFAULT_APPS_SCRIPT_URL) || 'https://script.google.com/macros/s/AKfycbwgKJbOlPqY6ZlnYQZlGQRB7zFu7w5dJFhjUlQY7VgrIWvnwgtHlsOw7BfBrEPgHPe6/exec'; // วาง Google Apps Script Web App URL เริ่มต้นตรงนี้
 export const GLOBAL_DEFAULT_FIREBASE_CONFIG = ((import.meta as any).env?.VITE_DEFAULT_FIREBASE_CONFIG) || '{"apiKey":"AIzaSyA3cIS9OgIUmJqTh-B73p97HCjAWm9og9E","authDomain":"cultivated-clock-67k72.firebaseapp.com","projectId":"cultivated-clock-67k72","storageBucket":"cultivated-clock-67k72.firebasestorage.app","messagingSenderId":"930501346572","appId":"1:930501346572:web:e51f98283bc1782ff3f529"}'; // วาง Firebase JSON Config เริ่มต้นตรงนี้
 export const GLOBAL_DEFAULT_GOOGLE_CLIENT_ID = ((import.meta as any).env?.VITE_DEFAULT_GOOGLE_CLIENT_ID) || ''; // วาง Google Client ID เริ่มต้นตรงนี้
 
@@ -755,11 +755,17 @@ export default function App() {
 
   // Connection Mode: Starts with Sandbox, user can toggle to Google Sheets Cloud Mode
   const [isCloudMode, setIsCloudMode] = useState<boolean>(() => {
+    const hasAdminQuery = new URLSearchParams(window.location.search).get('admin') === 'true';
+    const savedAdminMode = localStorage.getItem('hubfree_admin_mode') === 'true';
+    const currentIsAdmin = hasAdminQuery || savedAdminMode;
+    if (!currentIsAdmin) {
+      return true; // Force cloud/live sheet mode for non-admin visitors
+    }
     const saved = localStorage.getItem('hubfree_is_cloud_mode');
     if (saved !== null) {
       return saved === 'true';
     }
-    return !!GLOBAL_DEFAULT_SPREADSHEET_ID;
+    return true;
   });
 
   // Google Sheets file states
