@@ -84,6 +84,17 @@ export const mockSpreadsheets: MockSpreadsheet[] = [
           '4.6'
         ],
         [
+          'เกิดใหม่พร้อมดวงตาเทพมองทะลุ (พากย์ไทย เต็มเรื่อง HD)',
+          'หนังฟรี',
+          'เรื่องราวของชายหนุ่มที่ได้รับโอกาสเกิดใหม่พร้อมกับเนตรทิพย์ดวงตาเทพที่สามารถมองทะลุทุกสิ่งและหยั่งรู้อนาคต ภาพยนตร์แอ็กชันแฟนตาซีสุดมันส์',
+          '38500',
+          '28400',
+          '1.5 GB',
+          'https://images.unsplash.com/photo-1574375927938-d5a98e8ffe85?auto=format&fit=crop&w=600&q=80',
+          '<iframe width="600" height="480" src="https://playmogo.com/e/iiwicjcoyz4" scrolling="no" frameborder="0" allowfullscreen="true"></iframe>',
+          '4.8'
+        ],
+        [
           'Avatar 3: Fire and Ash (2026 ซับไทย/พากย์ไทย)',
           'ดูหนังฟรี (24-hds)',
           'ภาพยนตร์มหากาพย์ไซไฟฟอร์มยักษ์ เรื่องราวต่อเนื่องบนดาวแพนโดร่า พร้อมการเผชิญหน้ากับชนเผ่าเถ้าถ่านไฟที่มีความเกรี้ยวกราดรุนแรง',
@@ -91,7 +102,7 @@ export const mockSpreadsheets: MockSpreadsheet[] = [
           '22100',
           '2.4 GB',
           'https://images.unsplash.com/photo-1536440136628-849c177e76a1?auto=format&fit=crop&w=600&q=80',
-          '',
+          '<iframe width="600" height="480" src="https://playmogo.com/e/iiwicjcoyz4" scrolling="no" frameborder="0" allowfullscreen="true"></iframe>',
           '4.9'
         ],
         [
@@ -102,7 +113,7 @@ export const mockSpreadsheets: MockSpreadsheet[] = [
           '11200',
           '1.8 GB',
           'https://images.unsplash.com/photo-1478720568477-15109b3f6636?auto=format&fit=crop&w=600&q=80',
-          '',
+          'https://www.youtube.com/embed/9ix7TUGVYIo',
           '4.5'
         ]
       ],

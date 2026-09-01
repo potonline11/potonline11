@@ -74,6 +74,10 @@ import {
   Activity,
   Terminal,
   Settings2,
+  Play,
+  Video,
+  Maximize2,
+  Minimize2,
   // Movies Subcategories
   Film,
   Clapperboard,
@@ -201,11 +205,45 @@ const convertDriveImageUrl = (url: string): string => {
   return trimmed;
 };
 
+// Helper to extract clean URL from any string that might be an iframe, HTML tag, or formula
+export const extractCleanUrl = (val: string): string => {
+  if (!val) return '';
+  let cleaned = extractUrlFromFormula(val).trim();
+  
+  // If wrapped in HTML entities
+  if (cleaned.includes('&lt;') || cleaned.includes('&gt;')) {
+    cleaned = cleaned
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&amp;/g, '&');
+  }
+
+  // If it's an <iframe> tag or contains src=
+  if (cleaned.includes('<iframe') || cleaned.includes('src=')) {
+    const srcMatch = cleaned.match(/src=["']([^"']+)["']/i);
+    if (srcMatch && srcMatch[1]) {
+      return srcMatch[1].trim();
+    }
+  }
+
+  // If it's an <a> tag
+  if (cleaned.includes('<a') && cleaned.includes('href=')) {
+    const hrefMatch = cleaned.match(/href=["']([^"']+)["']/i);
+    if (hrefMatch && hrefMatch[1]) {
+      return hrefMatch[1].trim();
+    }
+  }
+
+  return cleaned;
+};
+
 // Help convert Google Drive downloadable links into automated trigger downloads
 const convertDriveDownloadUrl = (url: string): string => {
   if (!url) return '#';
-  const cleanedUrl = extractUrlFromFormula(url);
-  const trimmed = cleanedUrl.trim();
+  const cleanUrl = extractCleanUrl(url);
+  const trimmed = cleanUrl.trim();
 
   // 1. Raw file ID
   if (/^[a-zA-Z0-9_-]{20,80}$/.test(trimmed)) {
@@ -225,6 +263,110 @@ const convertDriveDownloadUrl = (url: string): string => {
     }
   }
   return trimmed;
+};
+
+// Comprehensive detector and builder for Video / Iframe embeds
+export interface VideoEmbedData {
+  isVideo: boolean;
+  videoEmbedUrl: string;
+  rawIframe: string;
+  isIframeTag: boolean;
+}
+
+export const extractVideoEmbedData = (
+  rawVal: string,
+  category: string = '',
+  itemType: string = ''
+): VideoEmbedData => {
+  if (!rawVal) {
+    return { isVideo: false, videoEmbedUrl: '', rawIframe: '', isIframeTag: false };
+  }
+
+  let text = rawVal.trim();
+  // Unescape common HTML entities if present
+  if (text.includes('&lt;') || text.includes('&gt;')) {
+    text = text
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&amp;/g, '&');
+  }
+
+  // 1. Check if the cell contains an explicit <iframe tag
+  if (text.includes('<iframe')) {
+    const srcMatch = text.match(/src=["']([^"']+)["']/i);
+    const extractedSrc = srcMatch && srcMatch[1] ? srcMatch[1].trim() : '';
+    return {
+      isVideo: true,
+      videoEmbedUrl: extractedSrc,
+      rawIframe: text,
+      isIframeTag: true,
+    };
+  }
+
+  // 2. Check if the value is a direct streaming URL or embed platform
+  const cleanUrl = extractCleanUrl(text);
+  if (!cleanUrl) {
+    return { isVideo: false, videoEmbedUrl: '', rawIframe: '', isIframeTag: false };
+  }
+
+  const lower = cleanUrl.toLowerCase();
+  const isStreamingService =
+    lower.includes('playmogo.com') ||
+    lower.includes('youtube.com') ||
+    lower.includes('youtu.be') ||
+    lower.includes('vimeo.com') ||
+    lower.includes('dailymotion.com') ||
+    lower.includes('streamtape') ||
+    lower.includes('doodstream') ||
+    lower.includes('dood.') ||
+    lower.includes('ok.ru/video') ||
+    lower.includes('streamwish') ||
+    lower.includes('filemoon') ||
+    lower.includes('vidhide') ||
+    lower.includes('luluvdo') ||
+    lower.includes('fembed') ||
+    lower.includes('gounlimited') ||
+    lower.includes('.mp4') ||
+    lower.includes('.m3u8') ||
+    lower.includes('/embed/') ||
+    lower.includes('/e/') ||
+    (lower.includes('drive.google.com') && (lower.includes('/preview') || lower.includes('/view') || lower.includes('/file/d/')));
+
+  const isMovieCategory =
+    category.includes('ดูหนัง') ||
+    category.includes('หนัง') ||
+    category.includes('movie') ||
+    category.includes('cinema') ||
+    category.includes('series') ||
+    itemType.includes('movie') ||
+    itemType.includes('หนัง');
+
+  if (isStreamingService || (isMovieCategory && (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://')))) {
+    let embedUrl = cleanUrl;
+    
+    // YouTube convert
+    if (cleanUrl.includes('youtube.com/watch?v=')) {
+      const vid = cleanUrl.match(/v=([a-zA-Z0-9_-]+)/);
+      if (vid && vid[1]) embedUrl = `https://www.youtube.com/embed/${vid[1]}?autoplay=1`;
+    } else if (cleanUrl.includes('youtu.be/')) {
+      const vid = cleanUrl.match(/youtu\.be\/([a-zA-Z0-9_-]+)/);
+      if (vid && vid[1]) embedUrl = `https://www.youtube.com/embed/${vid[1]}?autoplay=1`;
+    } else if (cleanUrl.includes('drive.google.com/file/d/')) {
+      const driveId = getGoogleDriveId(cleanUrl);
+      if (driveId) embedUrl = `https://drive.google.com/file/d/${driveId}/preview`;
+    }
+
+    return {
+      isVideo: true,
+      videoEmbedUrl: embedUrl,
+      rawIframe: `<iframe src="${embedUrl}" width="100%" height="100%" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen="true"></iframe>`,
+      isIframeTag: false,
+    };
+  }
+
+  return { isVideo: false, videoEmbedUrl: '', rawIframe: '', isIframeTag: false };
 };
 
 // Help handle image error fallback beautifully with multi-layered high-availability proxies
@@ -363,7 +505,51 @@ interface SafeHtmlContentProps {
 function SafeHtmlContent({ htmlContent, className = '' }: SafeHtmlContentProps) {
   if (!htmlContent) return null;
 
-  const trimmed = htmlContent.trim();
+  let trimmed = htmlContent.trim();
+
+  // If contains raw iframe tag or unescaped iframe code
+  if (trimmed.includes('<iframe') || trimmed.includes('&lt;iframe')) {
+    let unescaped = trimmed;
+    if (unescaped.includes('&lt;iframe')) {
+      unescaped = unescaped
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'");
+    }
+    const srcMatch = unescaped.match(/src=["']([^"']+)["']/i);
+    const srcUrl = srcMatch && srcMatch[1] ? srcMatch[1].trim() : '';
+
+    if (srcUrl) {
+      return (
+        <div className={`w-full bg-black rounded-2xl overflow-hidden border border-gray-800 shadow-2xl relative my-2 ${className}`}>
+          <div className="aspect-video w-full bg-black">
+            <iframe
+              src={srcUrl}
+              title="Embedded Video Player"
+              className="w-full h-full border-0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+              allowFullScreen
+              scrolling="no"
+            />
+          </div>
+          <div className="bg-[#0e1424] px-4 py-2 border-t border-gray-800 flex items-center justify-between text-xs text-gray-300">
+            <span className="flex items-center gap-1.5 text-amber-400 font-semibold text-[11px]">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              ตัวเล่นภาพยนตร์ (Embedded Player)
+            </span>
+            <button
+              onClick={() => window.open(srcUrl, '_blank')}
+              className="text-gray-400 hover:text-white flex items-center gap-1 text-[11px] underline underline-offset-2 transition-colors cursor-pointer"
+            >
+              เปิดเต็มจอในแท็บใหม่ ↗
+            </button>
+          </div>
+        </div>
+      );
+    }
+  }
+
   const isFullHtml = /<!DOCTYPE|<html>|<head>|<body>/i.test(trimmed);
   const hasTags = /<[a-z][\s\S]*>/i.test(trimmed);
 
@@ -1967,6 +2153,7 @@ export default function App() {
     const lUrlIdx = findHeaderIndex(headers, ['imageurl', 'image_url', 'image url', 'screenshot', 'url รูป', 'รูปภาพ', 'ลิงก์รูป', 'รูปภาพประกอบ', 'ภาพ', 'ลิงก์ภาพ', 'bannerimage', 'banner_image', 'banner image', 'banner']);
     const dUrlIdx = findHeaderIndex(headers, ['downloadurl', 'download_url', 'download url', 'link', 'ลิงก์ดาวน์โหลด', 'ดาวน์โหลด', 'ลิงก์โหลด', 'ลิงก์', 'โหลด']);
     const rIdx = findHeaderIndex(headers, ['rating', 'score', 'star', 'stars', 'คะแนน', 'เรตติ้ง']);
+    const videoIdx = findHeaderIndex(headers, ['video', 'videourl', 'video_url', 'video url', 'iframe', 'embed', 'player', 'ดูหนัง', 'ลิงก์หนัง', 'ตัวเล่น', 'เล่นหนัง', 'stream', 'stream_url', 'stream url', 'movie_url', 'movie url', 'link_video', 'link video']);
 
     return rows.slice(1).map((row) => {
       const getCell = (r: string[], idx: number, defaultIdx: number, defVal: string): string => {
@@ -1985,12 +2172,37 @@ export default function App() {
       const rawImageUrl = getCell(row, lUrlIdx, 6, '');
       const rawDownloadUrl = getCell(row, dUrlIdx, 7, '#');
       const rating = getCell(row, rIdx, 8, '4.8');
+      const rawVideo = videoIdx !== -1 ? getCell(row, videoIdx, -1, '') : '';
 
       const extractedType = typeIdx !== -1 ? getCell(row, typeIdx, -1, '') : '';
       const extractedSubcat = subCatIdx !== -1 ? getCell(row, subCatIdx, -1, '') : '';
 
       const imageUrl = convertDriveImageUrl(rawImageUrl);
       const downloadUrl = convertDriveDownloadUrl(rawDownloadUrl);
+
+      // ตรวจสอบและดึงข้อมูล Video Embed / Iframe สำหรับดูหนังออนไลน์ผ่านเว็บโดยตรง
+      let videoData = extractVideoEmbedData(rawVideo, category, extractedType);
+      if (!videoData.isVideo && rawDownloadUrl) {
+        videoData = extractVideoEmbedData(rawDownloadUrl, category, extractedType);
+      }
+      if (!videoData.isVideo && detailedDescription && (detailedDescription.includes('<iframe') || detailedDescription.includes('playmogo.com'))) {
+        videoData = extractVideoEmbedData(detailedDescription, category, extractedType);
+      }
+      if (!videoData.isVideo && description && (description.includes('<iframe') || description.includes('playmogo.com'))) {
+        videoData = extractVideoEmbedData(description, category, extractedType);
+      }
+
+      const isVideo = videoData.isVideo || 
+                      category.includes('ดูหนัง') || 
+                      category.includes('หนัง') || 
+                      category.includes('movie') || 
+                      extractedType.includes('movie') || 
+                      extractedType.includes('หนัง');
+
+      let finalVideoEmbedUrl = videoData.videoEmbedUrl;
+      if (!finalVideoEmbedUrl && isVideo && downloadUrl && downloadUrl !== '#' && (downloadUrl.startsWith('http://') || downloadUrl.startsWith('https://'))) {
+        finalVideoEmbedUrl = downloadUrl;
+      }
 
       // ตรวจสอบและแปลงโค้ด HTML Image จาก Google Sheet โดยตรงตามที่ผู้ใช้ต้องการ
       let isHtmlImage = false;
@@ -2028,7 +2240,10 @@ export default function App() {
         type: extractedType,
         subCategory: extractedSubcat,
         isHtmlImage,
-        htmlImage
+        htmlImage,
+        isVideo,
+        videoEmbedUrl: finalVideoEmbedUrl,
+        rawIframe: videoData.rawIframe
       };
     });
   }
@@ -2391,9 +2606,15 @@ export default function App() {
   const triggerDownloadAction = (product: HubItem) => {
     // If the product is already unlocked, trigger download directly
     if (unlockedProductIds.includes(product.id)) {
-      addLog('success', `คำขอดาวน์โหลด: กำลังเปลี่ยนเส้นทางไปลิงก์ดาวน์โหลดสำหรับ "${product.title}"`, `ลิงก์: ${product.downloadUrl}`);
-      if (product.downloadUrl && product.downloadUrl !== '#') {
-        window.open(product.downloadUrl, '_blank');
+      const cleanUrl = extractCleanUrl(product.downloadUrl);
+      addLog('success', `คำขอดาวน์โหลด: กำลังเปลี่ยนเส้นทางสำหรับ "${product.title}"`, `ลิงก์: ${cleanUrl || product.videoEmbedUrl || '#'}`);
+      
+      if (product.isVideo && product.videoEmbedUrl) {
+        setSelectedProduct(product);
+      } else if (cleanUrl && cleanUrl !== '#' && (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://'))) {
+        window.open(cleanUrl, '_blank');
+      } else if (product.videoEmbedUrl) {
+        setSelectedProduct(product);
       } else {
         alert(`⚠️ ลิงก์ดาวน์โหลดไม่ถูกต้อง หรือไฟล์นี้เป็นแบบระบบจองชมล่วงหน้า ขออภัยในความไม่สะดวก!`);
       }
@@ -2448,9 +2669,14 @@ export default function App() {
     addLog('success', `ปลดล็อกเสร็จสมบูรณ์! 🎉`, `ปลดล็อกสิทธิ์เข้าชมและดาวน์โหลดสำหรับ "${product.title}" ถาวรสำเร็จผ่านวิถี: ${method}`);
     setPendingUnlockProduct(null);
     
-    // Auto initiate actual download after unblocking
-    if (product.downloadUrl && product.downloadUrl !== '#') {
-      window.open(product.downloadUrl, '_blank');
+    // Auto initiate actual download/watch after unblocking
+    const cleanUrl = extractCleanUrl(product.downloadUrl);
+    if (product.isVideo && product.videoEmbedUrl) {
+      setSelectedProduct(product);
+    } else if (cleanUrl && cleanUrl !== '#' && (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://'))) {
+      window.open(cleanUrl, '_blank');
+    } else if (product.videoEmbedUrl) {
+      setSelectedProduct(product);
     } else {
       alert(`🎉 ระบบสะสมสิทธิ์ปลดล็อกสมบูรณ์แล้ว! มาร์เก็ตเพลสยินดีต้อนรับ แต่ดูเหมือนลิงก์ดาวน์โหลดจะไม่ถูกต้องหรือเป็นหน้าเตรียมจอง`);
     }
@@ -3027,15 +3253,24 @@ export default function App() {
                       onClick={() => setSelectedProduct(featuredProduct)}
                       className="bg-amber-500 hover:bg-amber-600 text-black text-xs font-black shadow-lg shadow-amber-500/10 px-6 py-3.5 rounded-xl cursor-pointer flex items-center gap-2 transform active:scale-95 transition-all text-center"
                     >
-                      <Plus className="w-4 h-4 text-black font-extrabold" />
-                      ดูรายละเอียดและดาวน์โหลดฟรี
+                      {featuredProduct.isVideo || activeTab === 'Movies' ? (
+                        <>
+                          <Play className="w-4 h-4 text-black fill-black" />
+                          ดูหนังออนไลน์ทันที
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="w-4 h-4 text-black font-extrabold" />
+                          ดูรายละเอียดและดาวน์โหลดฟรี
+                        </>
+                      )}
                     </button>
                     <button
                       onClick={() => triggerDownloadAction(featuredProduct)}
                       className="bg-gray-900 border border-gray-800 hover:bg-gray-800 text-gray-300 py-3.5 px-6 rounded-xl text-xs font-semibold cursor-pointer flex items-center gap-1.5 transition-all"
                     >
                       <ExternalLink className="w-4.5 h-4.5" />
-                      ลิงก์สำรองตรง
+                      {featuredProduct.isVideo || activeTab === 'Movies' ? 'ลิงก์ตรง / สำรอง' : 'ลิงก์สำรองตรง'}
                     </button>
                   </div>
                 </div>
@@ -3152,14 +3387,29 @@ export default function App() {
                             className="bg-gray-900 border border-gray-800 hover:bg-gray-850 text-gray-200 text-xs font-semibold py-2 px-3 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1"
                           >
                             <HelpCircle className="w-3.5 h-3.5 text-gray-400" />
-                            รีวิวละเอียด
+                            {p.isVideo || activeTab === 'Movies' ? 'ข้อมูลภาพยนตร์' : 'รีวิวละเอียด'}
                           </button>
                           <button
-                            onClick={() => triggerDownloadAction(p)}
+                            onClick={() => {
+                              if (p.isVideo && p.videoEmbedUrl) {
+                                setSelectedProduct(p);
+                              } else {
+                                triggerDownloadAction(p);
+                              }
+                            }}
                             className="bg-amber-500 hover:bg-amber-600 text-black text-xs font-bold py-2 px-3 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 transform active:scale-95"
                           >
-                            <Download className="w-3.5 h-3.5 text-black" />
-                            ดาวน์โหลด
+                            {p.isVideo || activeTab === 'Movies' ? (
+                              <>
+                                <Play className="w-3.5 h-3.5 text-black fill-black" />
+                                ดูหนังฟรี
+                              </>
+                            ) : (
+                              <>
+                                <Download className="w-3.5 h-3.5 text-black" />
+                                ดาวน์โหลด
+                              </>
+                            )}
                           </button>
                         </div>
                       </div>
@@ -4149,41 +4399,96 @@ function doPost(e) {
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 animate-fadeIn" id="detail-modal">
           <div className="bg-[#0b101c] w-full max-w-2xl rounded-3xl overflow-hidden border border-gray-800 shadow-2xl relative animate-scaleUp">
             
-            {/* Header Image cover */}
-            <div className="relative h-48 select-none bg-gray-950">
-              {selectedProduct.isHtmlImage && selectedProduct.htmlImage ? (
-                <div 
-                  className="w-full h-full [&>img]:w-full [&>img]:h-full [&>img]:object-cover opacity-80"
-                  dangerouslySetInnerHTML={{ __html: selectedProduct.htmlImage }}
-                />
-              ) : (
-                <img
-                  src={selectedProduct.imageUrl || null}
-                  alt={selectedProduct.title}
-                  className="w-full h-full object-cover opacity-80"
-                  referrerPolicy="no-referrer"
-                  data-original-drive-id={getGoogleDriveId(selectedProduct.imageUrl || '') || undefined}
-                  onError={handleImageError}
-                />
-              )}
-              <div className="absolute inset-0 bg-gradient-to-t from-[#0b101c] via-[#0b101c]/30 to-transparent" />
-              
-              <button
-                onClick={() => setSelectedProduct(null)}
-                className="absolute top-4 right-4 bg-black/60 hover:bg-black/90 text-gray-400 hover:text-white w-8 h-8 rounded-full flex items-center justify-center text-sm border border-gray-800 cursor-pointer select-none transition-all duration-200 shadow-md font-sans"
-              >
-                ✕
-              </button>
+            {/* Header Image or Cinema Video Player */}
+            {selectedProduct.isVideo && selectedProduct.videoEmbedUrl ? (
+              <div className="relative select-none bg-black">
+                {/* Top Player Control Bar */}
+                <div className="px-4 py-2 bg-[#090d16] border-b border-gray-800 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+                    <span className="text-xs font-bold text-white font-sans tracking-wide flex items-center gap-1.5">
+                      <Film className="w-3.5 h-3.5 text-amber-500" />
+                      โรงภาพยนตร์ออนไลน์ (Online Player HD)
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => window.open(selectedProduct.videoEmbedUrl, '_blank')}
+                      className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border border-amber-500/40 text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-all"
+                      title="เปิดดูในแท็บใหม่แบบเต็มหน้าต่าง"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      เปิดเต็มจอในแท็บใหม่ ↗
+                    </button>
+                    <button
+                      onClick={() => setSelectedProduct(null)}
+                      className="bg-black/60 hover:bg-black/90 text-gray-400 hover:text-white w-7 h-7 rounded-full flex items-center justify-center text-xs border border-gray-800 cursor-pointer transition-all font-sans"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
 
-              <div className="absolute bottom-4 left-6 space-y-1">
-                <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] px-3 py-0.5 rounded-md font-bold uppercase backdrop-blur-sm shadow-sm select-none">
-                  {selectedProduct.category}
-                </span>
-                <h3 className="text-xl sm:text-2xl font-black text-white leading-tight font-sans tracking-tight">
-                  {selectedProduct.title}
-                </h3>
+                {/* Embedded Video Player Iframe */}
+                <div className="w-full aspect-video bg-black relative">
+                  <iframe
+                    src={selectedProduct.videoEmbedUrl}
+                    title={selectedProduct.title}
+                    className="w-full h-full border-0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+                    allowFullScreen
+                    scrolling="no"
+                  />
+                </div>
+
+                {/* Video Title Bar */}
+                <div className="p-4 bg-gradient-to-t from-[#0b101c] to-[#090d16] border-b border-gray-800 flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] px-2.5 py-0.5 rounded-md font-bold uppercase">
+                      {selectedProduct.category}
+                    </span>
+                    <h3 className="text-lg sm:text-xl font-black text-white leading-tight font-sans tracking-tight">
+                      {selectedProduct.title}
+                    </h3>
+                  </div>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="relative h-48 select-none bg-gray-950">
+                {selectedProduct.isHtmlImage && selectedProduct.htmlImage ? (
+                  <div 
+                    className="w-full h-full [&>img]:w-full [&>img]:h-full [&>img]:object-cover opacity-80"
+                    dangerouslySetInnerHTML={{ __html: selectedProduct.htmlImage }}
+                  />
+                ) : (
+                  <img
+                    src={selectedProduct.imageUrl || null}
+                    alt={selectedProduct.title}
+                    className="w-full h-full object-cover opacity-80"
+                    referrerPolicy="no-referrer"
+                    data-original-drive-id={getGoogleDriveId(selectedProduct.imageUrl || '') || undefined}
+                    onError={handleImageError}
+                  />
+                )}
+                <div className="absolute inset-0 bg-gradient-to-t from-[#0b101c] via-[#0b101c]/30 to-transparent" />
+                
+                <button
+                  onClick={() => setSelectedProduct(null)}
+                  className="absolute top-4 right-4 bg-black/60 hover:bg-black/90 text-gray-400 hover:text-white w-8 h-8 rounded-full flex items-center justify-center text-sm border border-gray-800 cursor-pointer select-none transition-all duration-200 shadow-md font-sans"
+                >
+                  ✕
+                </button>
+
+                <div className="absolute bottom-4 left-6 space-y-1">
+                  <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] px-3 py-0.5 rounded-md font-bold uppercase backdrop-blur-sm shadow-sm select-none">
+                    {selectedProduct.category}
+                  </span>
+                  <h3 className="text-xl sm:text-2xl font-black text-white leading-tight font-sans tracking-tight">
+                    {selectedProduct.title}
+                  </h3>
+                </div>
+              </div>
+            )}
 
             {/* Core details body */}
             <div className="p-6 sm:p-8 space-y-5 max-h-[65vh] overflow-y-auto">
@@ -4202,38 +4507,35 @@ function doPost(e) {
                   <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block font-sans select-none">
                     รายละเอียดเจาะลึก (Detailed Review)
                   </h4>
-                  <div 
-                    className="text-xs sm:text-sm text-gray-300 leading-relaxed font-sans font-light bg-[#070b13]/40 p-4 sm:p-5 rounded-2xl border border-gray-850 shadow-inner html-content-container"
-                    dangerouslySetInnerHTML={{ __html: selectedProduct.detailedDescription }}
-                  />
+                  <SafeHtmlContent htmlContent={selectedProduct.detailedDescription} />
                 </div>
               )}
 
               {/* Grid Metadata metrics */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
                 <div className="bg-black/40 p-3 rounded-2xl border border-gray-850 select-none shadow-sm">
-                  <span className="text-[9px] text-gray-500 uppercase block">คะแนนความหรูหรา</span>
+                  <span className="text-[9px] text-gray-500 uppercase block">คะแนนความนิยม</span>
                   <p className="text-xs font-black text-amber-500 flex items-center justify-center gap-1 mt-0.5 font-mono">
                     <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
                     {selectedProduct.rating} / 5.0
                   </p>
                 </div>
                 <div className="bg-black/40 p-3 rounded-2xl border border-gray-850 select-none shadow-sm">
-                  <span className="text-[9px] text-gray-500 uppercase block">ยอดโหลดสะสม</span>
+                  <span className="text-[9px] text-gray-500 uppercase block">{selectedProduct.isVideo ? 'ยอดเข้าชมสะสม' : 'ยอดโหลดสะสม'}</span>
                   <p className="text-xs font-black text-emerald-400 flex items-center justify-center gap-1 mt-0.5 font-mono">
-                    <Download className="w-3.5 h-3.5" />
+                    {selectedProduct.isVideo ? <Play className="w-3.5 h-3.5 fill-emerald-400" /> : <Download className="w-3.5 h-3.5" />}
                     {Number(selectedProduct.downloads).toLocaleString() || selectedProduct.downloads}
                   </p>
                 </div>
                 <div className="bg-black/40 p-3 rounded-2xl border border-gray-850 select-none shadow-sm">
-                  <span className="text-[9px] text-gray-500 uppercase block">การจองชมสะสม</span>
+                  <span className="text-[9px] text-gray-500 uppercase block">การเปิดรับชม</span>
                   <p className="text-xs font-black text-amber-400 flex items-center justify-center gap-1 mt-0.5 font-mono">
                     <Eye className="w-3.5 h-3.5" />
                     {Number(selectedProduct.views).toLocaleString() || selectedProduct.views}
                   </p>
                 </div>
                 <div className="bg-black/40 p-3 rounded-2xl border border-gray-850 select-none shadow-sm">
-                  <span className="text-[9px] text-gray-500 uppercase block">ขนาดไฟล์จัดสรร</span>
+                  <span className="text-[9px] text-gray-500 uppercase block">ความละเอียด / ขนาด</span>
                   <p className="text-xs font-black text-indigo-400 mt-0.5">
                     {selectedProduct.fileSize}
                   </p>
@@ -4246,25 +4548,36 @@ function doPost(e) {
                   ✔
                 </div>
                 <div className="space-y-0.5 font-sans leading-relaxed">
-                  <h4 className="font-extrabold text-white text-[11px]">ไฟล์สแกนปลอดภัย ไร้รหัสมัลแวร์แฝงและคอร์สขวาง</h4>
-                  <p className="text-gray-400 text-[10px]">ตรวจสอบโดยระบบกอปรด้วย WinDefender และ VirusTotal เรียบร้อย มั่นใจรันปลอดภัย!</p>
+                  <h4 className="font-extrabold text-white text-[11px]">ระบบเสถียรภาพสูง ลิงก์ตรงความเร็วสูง ปลอดภัย 100%</h4>
+                  <p className="text-gray-400 text-[10px]">ตรวจสอบและสตรีมผ่านระบบแคชความเร็วสูง มั่นใจรับชมและดาวน์โหลดได้ไม่มีสะดุด</p>
                 </div>
               </div>
 
               {/* Modal footer download actions */}
-              <div className="flex justify-end gap-2 border-t border-gray-850 pt-4">
+              <div className="flex flex-wrap items-center justify-end gap-2 border-t border-gray-850 pt-4">
                 <button
                   onClick={() => setSelectedProduct(null)}
                   className="bg-gray-900 hover:bg-gray-800 text-gray-400 text-xs font-bold py-2.5 px-5 rounded-xl cursor-pointer"
                 >
                   ย้อนกลับสู่คลัง
                 </button>
+
+                {selectedProduct.videoEmbedUrl && (
+                  <button
+                    onClick={() => window.open(selectedProduct.videoEmbedUrl, '_blank')}
+                    className="bg-gray-800 hover:bg-gray-700 text-amber-400 border border-amber-500/30 text-xs font-bold py-2.5 px-4 rounded-xl cursor-pointer flex items-center gap-1.5 shadow-sm transition-all"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    เปิดแท็บเล่นหนังเต็มจอ
+                  </button>
+                )}
+
                 <button
                   onClick={() => triggerDownloadAction(selectedProduct)}
                   className="bg-amber-500 hover:bg-amber-600 text-black text-xs font-black py-2.5 px-6 rounded-xl cursor-pointer flex items-center gap-1.5 shadow-md shadow-amber-500/10 active:scale-95 transition-all text-center"
                 >
                   <Download className="w-4.5 h-4.5 text-black" />
-                  เริ่มดาวน์โหลดฟรีหลัก
+                  {selectedProduct.isVideo ? 'ดาวน์โหลด / ลิงก์สำรอง' : 'เริ่มดาวน์โหลดฟรีหลัก'}
                 </button>
               </div>
 

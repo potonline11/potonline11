@@ -33,4 +33,7 @@ export interface HubItem {
   subCategory?: string;
   isHtmlImage?: boolean;
   htmlImage?: string;
+  isVideo?: boolean;
+  videoEmbedUrl?: string;
+  rawIframe?: string;
 }
