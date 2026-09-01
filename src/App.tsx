@@ -3372,13 +3372,19 @@ export default function App() {
                   {/* Actions to open details */}
                   <div className="flex flex-wrap items-center gap-3">
                     <button
-                      onClick={() => setSelectedProduct(featuredProduct)}
+                      onClick={() => {
+                        if (unlockedProductIds.includes(featuredProduct.id)) {
+                          setSelectedProduct(featuredProduct);
+                        } else {
+                          triggerDownloadAction(featuredProduct);
+                        }
+                      }}
                       className="bg-amber-500 hover:bg-amber-600 text-black text-xs font-black shadow-lg shadow-amber-500/10 px-6 py-3.5 rounded-xl cursor-pointer flex items-center gap-2 transform active:scale-95 transition-all text-center"
                     >
                       {featuredProduct.isVideo || activeTab === 'Movies' ? (
                         <>
                           <Play className="w-4 h-4 text-black fill-black" />
-                          ดูหนังออนไลน์ทันที
+                          {unlockedProductIds.includes(featuredProduct.id) ? 'ดูหนังออนไลน์ทันที' : '🔒 ปลดล็อกเพื่อดูหนังฟรี'}
                         </>
                       ) : (
                         <>
@@ -3512,25 +3518,37 @@ export default function App() {
                             {p.isVideo || activeTab === 'Movies' ? 'ข้อมูลภาพยนตร์' : 'รีวิวละเอียด'}
                           </button>
                           <button
-                            onClick={() => {
-                              if (p.isVideo && p.videoEmbedUrl) {
-                                setSelectedProduct(p);
-                              } else {
-                                triggerDownloadAction(p);
-                              }
-                            }}
-                            className="bg-amber-500 hover:bg-amber-600 text-black text-xs font-bold py-2 px-3 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 transform active:scale-95"
+                            onClick={() => triggerDownloadAction(p)}
+                            className={`text-xs font-bold py-2 px-3 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 transform active:scale-95 border-none ${
+                              unlockedProductIds.includes(p.id)
+                                ? 'bg-emerald-500 hover:bg-emerald-600 text-black shadow-md shadow-emerald-500/10'
+                                : 'bg-amber-500 hover:bg-amber-600 text-black shadow-md shadow-amber-500/10'
+                            }`}
                           >
                             {p.isVideo || activeTab === 'Movies' ? (
-                              <>
-                                <Play className="w-3.5 h-3.5 text-black fill-black" />
-                                ดูหนังฟรี
-                              </>
+                              unlockedProductIds.includes(p.id) ? (
+                                <>
+                                  <Play className="w-3.5 h-3.5 text-black fill-black" />
+                                  ดูหนังออนไลน์
+                                </>
+                              ) : (
+                                <>
+                                  <Lock className="w-3.5 h-3.5 text-black" />
+                                  ปลดล็อกดูหนัง
+                                </>
+                              )
                             ) : (
-                              <>
-                                <Download className="w-3.5 h-3.5 text-black" />
-                                ดาวน์โหลด
-                              </>
+                              unlockedProductIds.includes(p.id) ? (
+                                <>
+                                  <Download className="w-3.5 h-3.5 text-black" />
+                                  ดาวน์โหลด
+                                </>
+                              ) : (
+                                <>
+                                  <Lock className="w-3.5 h-3.5 text-black" />
+                                  ปลดล็อกโหลด
+                                </>
+                              )
                             )}
                           </button>
                         </div>
@@ -4518,83 +4536,156 @@ function doPost(e) {
       {/* GLOBAL DIALOG: PREMIUM PRODUCT DETAIL REVIEW POPUP 🏮 */}
       {/* ------------------------------------------------------------- */}
       {selectedProduct && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 animate-fadeIn" id="detail-modal">
-          <div className="bg-[#0b101c] w-full max-w-2xl rounded-3xl overflow-hidden border border-gray-800 shadow-2xl relative animate-scaleUp">
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 animate-fadeIn" id="detail-modal">
+          <div className="bg-[#0b101c] w-full max-w-4xl lg:max-w-5xl rounded-3xl overflow-hidden border border-gray-800 shadow-2xl relative animate-scaleUp max-h-[92vh] flex flex-col">
             
             {/* Header Image or Cinema Video Player */}
             {selectedProduct.isVideo && selectedProduct.videoEmbedUrl ? (
-              <div className="relative select-none bg-black">
-                {/* Top Player Control Bar */}
-                <div className="px-4 py-2.5 bg-[#090d16] border-b border-gray-800 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
-                    <span className="text-xs font-bold text-white font-sans tracking-wide flex items-center gap-1.5">
-                      <Film className="w-3.5 h-3.5 text-amber-500" />
-                      โรงภาพยนตร์ออนไลน์ (Online Cinema Player HD)
-                    </span>
+              unlockedProductIds.includes(selectedProduct.id) ? (
+                /* UNLOCKED: CINEMA PLAYER */
+                <div className="relative select-none bg-black">
+                  {/* Top Player Control Bar */}
+                  <div className="px-4 py-2.5 bg-[#090d16] border-b border-gray-800 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+                      <span className="text-xs font-bold text-white font-sans tracking-wide flex items-center gap-1.5">
+                        <Film className="w-3.5 h-3.5 text-amber-500" />
+                        โรงภาพยนตร์ออนไลน์ (Online Cinema Player HD)
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => openSafeExternalUrl(selectedProduct.videoEmbedUrl)}
+                        className="bg-amber-500 hover:bg-amber-400 text-black font-black text-[11px] px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer shadow-md shadow-amber-500/20 active:scale-95 transition-all"
+                        title="เปิดดูในแท็บใหม่แบบเต็มหน้าต่าง (แนะนำหากติดหน้า Cloudflare)"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        เปิดดูเต็มจอในแท็บใหม่ ↗
+                      </button>
+                      <button
+                        onClick={() => setSelectedProduct(null)}
+                        className="bg-black/60 hover:bg-black/90 text-gray-400 hover:text-white w-7 h-7 rounded-full flex items-center justify-center text-xs border border-gray-800 cursor-pointer transition-all font-sans"
+                      >
+                        ✕
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
+
+                  {/* Cloudflare Security Bypass Notice Banner */}
+                  <div className="bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-transparent border-b border-amber-500/25 px-4 py-2 flex items-center justify-between text-xs text-amber-200">
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      <span className="text-base shrink-0">🛡️</span>
+                      <p className="text-[11px] font-sans">
+                        หากตัวเล่นติดหน้า <b>"Checking your browser"</b> (Cloudflare): ให้กดปุ่ม <b>"เปิดดูเต็มจอในแท็บใหม่"</b> ด้านบน เพื่อเล่นหนังทันที!
+                      </p>
+                    </div>
                     <button
                       onClick={() => openSafeExternalUrl(selectedProduct.videoEmbedUrl)}
-                      className="bg-amber-500 hover:bg-amber-400 text-black font-black text-[11px] px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer shadow-md shadow-amber-500/20 active:scale-95 transition-all"
-                      title="เปิดดูในแท็บใหม่แบบเต็มหน้าต่าง (แนะนำหากติดหน้า Cloudflare)"
+                      className="shrink-0 ml-2 text-[10px] bg-amber-500/25 hover:bg-amber-500/40 text-amber-300 font-bold px-2.5 py-1 rounded border border-amber-500/40 cursor-pointer transition-all"
                     >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      เปิดดูเต็มจอในแท็บใหม่ ↗
+                      เปิดแท็บใหม่ทันที ↗
                     </button>
-                    <button
-                      onClick={() => setSelectedProduct(null)}
-                      className="bg-black/60 hover:bg-black/90 text-gray-400 hover:text-white w-7 h-7 rounded-full flex items-center justify-center text-xs border border-gray-800 cursor-pointer transition-all font-sans"
-                    >
-                      ✕
-                    </button>
+                  </div>
+
+                  {/* Embedded Video Player Iframe (Responsive Aspect Ratio) */}
+                  <div className="w-full bg-black relative flex items-center justify-center min-h-[340px] max-h-[55vh] overflow-hidden">
+                    <div className="w-full aspect-video max-h-[55vh]">
+                      <iframe
+                        src={selectedProduct.videoEmbedUrl}
+                        title={selectedProduct.title}
+                        className="w-full h-full border-0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+                        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation allow-downloads"
+                        referrerPolicy="no-referrer-when-downgrade"
+                        allowFullScreen
+                        scrolling="no"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Video Title Bar */}
+                  <div className="p-4 bg-gradient-to-t from-[#0b101c] to-[#090d16] border-b border-gray-800 flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] px-2.5 py-0.5 rounded-md font-bold uppercase flex items-center gap-1 w-max">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                        ปลดล็อกสิทธิ์เข้าชมแล้ว • {selectedProduct.category}
+                      </span>
+                      <h3 className="text-lg sm:text-xl font-black text-white leading-tight font-sans tracking-tight">
+                        {selectedProduct.title}
+                      </h3>
+                    </div>
                   </div>
                 </div>
-
-                {/* Cloudflare Security Bypass Notice Banner */}
-                <div className="bg-gradient-to-r from-amber-550/15 via-amber-500/10 to-transparent border-b border-amber-500/25 px-4 py-2 flex items-center justify-between text-xs text-amber-200">
-                  <div className="flex items-center gap-2 overflow-hidden">
-                    <span className="text-base shrink-0">🛡️</span>
-                    <p className="text-[11px] font-sans">
-                      หากตัวเล่นติดหน้า <b>"Checking your browser"</b> (Cloudflare): ให้กดปุ่ม <b>"เปิดดูเต็มจอในแท็บใหม่"</b> ด้านบน เพื่อเล่นหนังทันที!
-                    </p>
-                  </div>
+              ) : (
+                /* LOCKED: CINEMA PREVIEW SCREEN REQUIRING CONDITIONS */
+                <div className="relative min-h-[300px] sm:min-h-[340px] select-none bg-gray-950 flex flex-col justify-center items-center text-center p-6 overflow-hidden">
+                  {/* Background Poster with Blur */}
+                  {selectedProduct.isHtmlImage && selectedProduct.htmlImage ? (
+                    <div 
+                      className="absolute inset-0 [&>img]:w-full [&>img]:h-full [&>img]:object-cover opacity-20 blur-md scale-110"
+                      dangerouslySetInnerHTML={{ __html: selectedProduct.htmlImage }}
+                    />
+                  ) : (
+                    <img
+                      src={selectedProduct.imageUrl || null}
+                      alt={selectedProduct.title}
+                      className="absolute inset-0 w-full h-full object-cover opacity-20 blur-md scale-110"
+                      referrerPolicy="no-referrer"
+                      data-original-drive-id={getGoogleDriveId(selectedProduct.imageUrl || '') || undefined}
+                      onError={handleImageError}
+                    />
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-b from-[#0b101c]/80 via-[#0b101c]/90 to-[#0b101c]" />
+                  
                   <button
-                    onClick={() => openSafeExternalUrl(selectedProduct.videoEmbedUrl)}
-                    className="shrink-0 ml-2 text-[10px] bg-amber-500/25 hover:bg-amber-500/40 text-amber-300 font-bold px-2.5 py-1 rounded border border-amber-500/40 cursor-pointer transition-all"
+                    onClick={() => setSelectedProduct(null)}
+                    className="absolute top-4 right-4 bg-black/60 hover:bg-black/90 text-gray-400 hover:text-white w-8 h-8 rounded-full flex items-center justify-center text-sm border border-gray-800 cursor-pointer select-none transition-all duration-200 shadow-md font-sans z-10"
                   >
-                    เปิดแท็บใหม่ทันที ↗
+                    ✕
                   </button>
-                </div>
 
-                {/* Embedded Video Player Iframe */}
-                <div className="w-full aspect-video bg-black relative">
-                  <iframe
-                    src={selectedProduct.videoEmbedUrl}
-                    title={selectedProduct.title}
-                    className="w-full h-full border-0"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation allow-downloads"
-                    referrerPolicy="no-referrer-when-downgrade"
-                    allowFullScreen
-                    scrolling="no"
-                  />
-                </div>
+                  {/* Lock Screen Center Content */}
+                  <div className="relative z-10 max-w-lg mx-auto space-y-3.5">
+                    <div className="w-16 h-16 rounded-full bg-amber-500/10 border-2 border-amber-500/40 flex items-center justify-center mx-auto shadow-lg shadow-amber-500/10 animate-bounce">
+                      <Lock className="w-8 h-8 text-amber-500" />
+                    </div>
 
-                {/* Video Title Bar */}
-                <div className="p-4 bg-gradient-to-t from-[#0b101c] to-[#090d16] border-b border-gray-800 flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] px-2.5 py-0.5 rounded-md font-bold uppercase">
-                      {selectedProduct.category}
-                    </span>
-                    <h3 className="text-lg sm:text-xl font-black text-white leading-tight font-sans tracking-tight">
-                      {selectedProduct.title}
-                    </h3>
+                    <div className="space-y-1">
+                      <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] px-3 py-0.5 rounded-full font-bold uppercase">
+                        🔒 สิทธิ์การรับชมภาพยนตร์ถูกจำกัด
+                      </span>
+                      <h3 className="text-xl sm:text-2xl font-black text-white leading-tight font-sans tracking-tight">
+                        {selectedProduct.title}
+                      </h3>
+                    </div>
+
+                    <p className="text-xs sm:text-sm text-gray-300 font-light leading-relaxed">
+                      ภาพยนตร์เรื่องนี้ต้องทำตามเงื่อนไขก่อนเข้าชมฟรี: ทำภารกิจคลิกสปอนเซอร์ 5 ครั้ง หรือสนับสนุนค่าน้ำชาเพื่อรับรหัส VIP
+                    </p>
+
+                    <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+                      <button
+                        onClick={() => {
+                          setPendingUnlockProduct(selectedProduct);
+                          setClickedSponsors([]);
+                          setPaymentTxId('');
+                          setUnlockVipCode('');
+                          setUploadedSlipUrl(null);
+                          setShowVipCodeSuccess(null);
+                          setAiVerificationLogs([]);
+                          setActiveUnlockTab('Sponsors');
+                        }}
+                        className="w-full sm:w-auto bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs sm:text-sm px-6 py-3 rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-amber-500/20 active:scale-95 transition-all"
+                      >
+                        <Unlock className="w-4 h-4 text-black" />
+                        ทำตามเงื่อนไขเพื่อปลดล็อกดูหนังฟรี 🔓
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )
             ) : (
-              <div className="relative h-48 select-none bg-gray-950">
+              <div className="relative h-48 sm:h-56 select-none bg-gray-950">
                 {selectedProduct.isHtmlImage && selectedProduct.htmlImage ? (
                   <div 
                     className="w-full h-full [&>img]:w-full [&>img]:h-full [&>img]:object-cover opacity-80"
@@ -4610,7 +4701,7 @@ function doPost(e) {
                     onError={handleImageError}
                   />
                 )}
-                <div className="absolute inset-0 bg-gradient-to-t from-[#0b101c] via-[#0b101c]/30 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#0b101c] via-[#0b101c]/40 to-transparent" />
                 
                 <button
                   onClick={() => setSelectedProduct(null)}
@@ -4631,7 +4722,7 @@ function doPost(e) {
             )}
 
             {/* Core details body */}
-            <div className="p-6 sm:p-8 space-y-5 max-h-[65vh] overflow-y-auto">
+            <div className="p-6 sm:p-8 space-y-5 overflow-y-auto flex-1">
               
               {/* Short Description (คำโปรย) */}
               <div className="space-y-1.5">
@@ -4702,22 +4793,35 @@ function doPost(e) {
                   ย้อนกลับสู่คลัง
                 </button>
 
-                {selectedProduct.videoEmbedUrl && (
+                {selectedProduct.videoEmbedUrl && unlockedProductIds.includes(selectedProduct.id) && (
                   <button
                     onClick={() => openSafeExternalUrl(selectedProduct.videoEmbedUrl)}
                     className="bg-gray-800 hover:bg-gray-700 text-amber-400 border border-amber-500/30 text-xs font-bold py-2.5 px-4 rounded-xl cursor-pointer flex items-center gap-1.5 shadow-sm transition-all"
                   >
                     <ExternalLink className="w-4 h-4" />
-                    เปิดแท็บเล่นหนังเต็มจอ
+                    เปิดแท็บเล่นหนังเต็มจอ ↗
                   </button>
                 )}
 
                 <button
                   onClick={() => triggerDownloadAction(selectedProduct)}
-                  className="bg-amber-500 hover:bg-amber-600 text-black text-xs font-black py-2.5 px-6 rounded-xl cursor-pointer flex items-center gap-1.5 shadow-md shadow-amber-500/10 active:scale-95 transition-all text-center"
+                  className={`text-xs font-black py-2.5 px-6 rounded-xl cursor-pointer flex items-center gap-1.5 shadow-md active:scale-95 transition-all text-center border-none ${
+                    unlockedProductIds.includes(selectedProduct.id)
+                      ? 'bg-emerald-500 hover:bg-emerald-600 text-black shadow-emerald-500/10'
+                      : 'bg-amber-500 hover:bg-amber-600 text-black shadow-amber-500/10'
+                  }`}
                 >
-                  <Download className="w-4.5 h-4.5 text-black" />
-                  {selectedProduct.isVideo ? 'ดาวน์โหลด / ลิงก์สำรอง' : 'เริ่มดาวน์โหลดฟรีหลัก'}
+                  {unlockedProductIds.includes(selectedProduct.id) ? (
+                    <>
+                      <Download className="w-4.5 h-4.5 text-black" />
+                      {selectedProduct.isVideo ? 'ดาวน์โหลด / ลิงก์สำรอง' : 'เริ่มดาวน์โหลดไฟล์จริง'}
+                    </>
+                  ) : (
+                    <>
+                      <Lock className="w-4.5 h-4.5 text-black" />
+                      {selectedProduct.isVideo ? '🔒 ปลดล็อกเพื่อเข้าดูหนังฟรี' : '🔒 ปลดล็อกเพื่อดาวน์โหลดฟรี'}
+                    </>
+                  )}
                 </button>
               </div>
 
