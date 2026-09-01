@@ -362,7 +362,9 @@ export const extractVideoEmbedData = (
   }
 
   const lower = cleanUrl.toLowerCase();
-  const isStreamingService =
+  
+  // Real Streaming Video Host Providers (NOT Google Drive images/files)
+  const isDedicatedVideoHost =
     lower.includes('playmogo.com') ||
     lower.includes('youtube.com') ||
     lower.includes('youtu.be') ||
@@ -381,19 +383,9 @@ export const extractVideoEmbedData = (
     lower.includes('.mp4') ||
     lower.includes('.m3u8') ||
     lower.includes('/embed/') ||
-    lower.includes('/e/') ||
-    (lower.includes('drive.google.com') && (lower.includes('/preview') || lower.includes('/view') || lower.includes('/file/d/')));
+    lower.includes('/e/');
 
-  const isMovieCategory =
-    category.includes('ดูหนัง') ||
-    category.includes('หนัง') ||
-    category.includes('movie') ||
-    category.includes('cinema') ||
-    category.includes('series') ||
-    itemType.includes('movie') ||
-    itemType.includes('หนัง');
-
-  if (isStreamingService || (isMovieCategory && (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://')))) {
+  if (isDedicatedVideoHost) {
     let embedUrl = cleanUrl;
     
     // YouTube convert
@@ -403,9 +395,6 @@ export const extractVideoEmbedData = (
     } else if (cleanUrl.includes('youtu.be/')) {
       const vid = cleanUrl.match(/youtu\.be\/([a-zA-Z0-9_-]+)/);
       if (vid && vid[1]) embedUrl = `https://www.youtube.com/embed/${vid[1]}?autoplay=1`;
-    } else if (cleanUrl.includes('drive.google.com/file/d/')) {
-      const driveId = getGoogleDriveId(cleanUrl);
-      if (driveId) embedUrl = `https://drive.google.com/file/d/${driveId}/preview`;
     }
 
     return {
@@ -593,12 +582,30 @@ function SafeHtmlContent({ htmlContent, className = '' }: SafeHtmlContentProps) 
       {/* Video Player if iframe is present */}
       {iframeSrc && (
         <div className="w-full bg-black rounded-2xl overflow-hidden border border-gray-800 shadow-2xl relative my-2">
+          {/* Cloudflare notification banner for embedded iframe */}
+          <div className="bg-amber-500/10 border-b border-amber-500/20 px-3.5 py-2 flex items-center justify-between text-xs text-amber-300">
+            <div className="flex items-center gap-1.5 overflow-hidden">
+              <span className="text-sm shrink-0">🛡️</span>
+              <p className="text-[11px] font-sans truncate">
+                หากตัวเล่นค้างหน้า <b>"Checking your browser"</b> (Cloudflare): ให้กดเปิดแท็บใหม่เพื่อรับชมทันที
+              </p>
+            </div>
+            <button
+              onClick={() => openSafeExternalUrl(iframeSrc)}
+              className="shrink-0 ml-2 text-[10px] bg-amber-500 hover:bg-amber-600 text-black font-extrabold px-2.5 py-1 rounded cursor-pointer transition-all shadow-sm active:scale-95"
+            >
+              เปิดเต็มจอ ↗
+            </button>
+          </div>
+
           <div className="aspect-video w-full bg-black">
             <iframe
               src={iframeSrc}
               title="Embedded Video Player"
               className="w-full h-full border-0"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation allow-downloads"
+              referrerPolicy="no-referrer-when-downgrade"
               allowFullScreen
               scrolling="no"
             />
@@ -610,7 +617,7 @@ function SafeHtmlContent({ htmlContent, className = '' }: SafeHtmlContentProps) 
             </span>
             <button
               onClick={() => openSafeExternalUrl(iframeSrc)}
-              className="text-gray-400 hover:text-white flex items-center gap-1 text-[11px] underline underline-offset-2 transition-colors cursor-pointer"
+              className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[11px] font-bold px-3 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-all active:scale-95"
             >
               เปิดเต็มจอในแท็บใหม่ ↗
             </button>
@@ -2244,22 +2251,51 @@ export default function App() {
       const imageUrl = convertDriveImageUrl(rawImageUrl);
       let downloadUrl = convertDriveDownloadUrl(rawDownloadUrl);
 
-      // ตรวจสอบและดึงข้อมูล Video Embed / Iframe สำหรับดูหนังออนไลน์ผ่านเว็บโดยตรง
-      let videoData = extractVideoEmbedData(rawVideo, category, extractedType);
-      if (!videoData.isVideo && rawDownloadUrl) {
-        videoData = extractVideoEmbedData(rawDownloadUrl, category, extractedType);
+      // 1. Scan EVERY cell in the row to find any real iframe or streaming video URL (Playmogo, YouTube, etc.)
+      let videoData = { isVideo: false, videoEmbedUrl: '', rawIframe: '', isIframeTag: false };
+
+      // Check explicit rawVideo cell if mapped
+      if (rawVideo) {
+        const v = extractVideoEmbedData(rawVideo, category, extractedType);
+        if (v.isVideo && v.videoEmbedUrl) videoData = v;
       }
-      if (!videoData.isVideo && downloadUrl && downloadUrl !== '#') {
-        videoData = extractVideoEmbedData(downloadUrl, category, extractedType);
+
+      // Check ALL cells in the row for <iframe or dedicated streaming service
+      if (!videoData.videoEmbedUrl) {
+        for (const cell of row) {
+          if (!cell || typeof cell !== 'string') continue;
+          const trimmedCell = cell.trim();
+          if (
+            trimmedCell.includes('<iframe') || 
+            trimmedCell.includes('&lt;iframe') ||
+            trimmedCell.includes('playmogo.com') ||
+            trimmedCell.includes('youtube.com') ||
+            trimmedCell.includes('youtu.be') ||
+            trimmedCell.includes('vimeo.com') ||
+            trimmedCell.includes('dailymotion.com') ||
+            trimmedCell.includes('vidhide') ||
+            trimmedCell.includes('streamtape') ||
+            trimmedCell.includes('dood') ||
+            trimmedCell.includes('streamwish') ||
+            trimmedCell.includes('filemoon')
+          ) {
+            const v = extractVideoEmbedData(trimmedCell, category, extractedType);
+            if (v.isVideo && v.videoEmbedUrl) {
+              videoData = v;
+              break;
+            }
+          }
+        }
       }
-      if (!videoData.isVideo && detailedDescription && (detailedDescription.includes('<iframe') || detailedDescription.includes('playmogo.com') || detailedDescription.includes('&lt;iframe'))) {
-        videoData = extractVideoEmbedData(detailedDescription, category, extractedType);
+
+      // Check detailedDescription & description
+      if (!videoData.videoEmbedUrl && detailedDescription) {
+        const v = extractVideoEmbedData(detailedDescription, category, extractedType);
+        if (v.isVideo && v.videoEmbedUrl) videoData = v;
       }
-      if (!videoData.isVideo && description && (description.includes('<iframe') || description.includes('playmogo.com') || description.includes('&lt;iframe'))) {
-        videoData = extractVideoEmbedData(description, category, extractedType);
-      }
-      if (!videoData.isVideo && rawImageUrl && (rawImageUrl.includes('<iframe') || rawImageUrl.includes('playmogo.com'))) {
-        videoData = extractVideoEmbedData(rawImageUrl, category, extractedType);
+      if (!videoData.videoEmbedUrl && description) {
+        const v = extractVideoEmbedData(description, category, extractedType);
+        if (v.isVideo && v.videoEmbedUrl) videoData = v;
       }
 
       const isVideo = videoData.isVideo || 
@@ -2272,7 +2308,11 @@ export default function App() {
                       extractedType.includes('หนัง');
 
       let finalVideoEmbedUrl = videoData.videoEmbedUrl ? extractCleanUrl(videoData.videoEmbedUrl) : '';
-      if (!finalVideoEmbedUrl && isVideo && downloadUrl && downloadUrl !== '#' && (downloadUrl.startsWith('http://') || downloadUrl.startsWith('https://'))) {
+      
+      // Do NOT set finalVideoEmbedUrl to a Google Drive URL as that causes "ต้องมีสิทธิ์เข้าถึง" permission block
+      if (!finalVideoEmbedUrl && isVideo && downloadUrl && downloadUrl !== '#' && 
+          (downloadUrl.startsWith('http://') || downloadUrl.startsWith('https://')) &&
+          !downloadUrl.includes('drive.google.com') && !downloadUrl.includes('docs.google.com')) {
         finalVideoEmbedUrl = downloadUrl;
       }
 
@@ -4485,22 +4525,22 @@ function doPost(e) {
             {selectedProduct.isVideo && selectedProduct.videoEmbedUrl ? (
               <div className="relative select-none bg-black">
                 {/* Top Player Control Bar */}
-                <div className="px-4 py-2 bg-[#090d16] border-b border-gray-800 flex items-center justify-between">
+                <div className="px-4 py-2.5 bg-[#090d16] border-b border-gray-800 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
                     <span className="text-xs font-bold text-white font-sans tracking-wide flex items-center gap-1.5">
                       <Film className="w-3.5 h-3.5 text-amber-500" />
-                      โรงภาพยนตร์ออนไลน์ (Online Player HD)
+                      โรงภาพยนตร์ออนไลน์ (Online Cinema Player HD)
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => window.open(selectedProduct.videoEmbedUrl, '_blank')}
-                      className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border border-amber-500/40 text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-all"
-                      title="เปิดดูในแท็บใหม่แบบเต็มหน้าต่าง"
+                      onClick={() => openSafeExternalUrl(selectedProduct.videoEmbedUrl)}
+                      className="bg-amber-500 hover:bg-amber-400 text-black font-black text-[11px] px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer shadow-md shadow-amber-500/20 active:scale-95 transition-all"
+                      title="เปิดดูในแท็บใหม่แบบเต็มหน้าต่าง (แนะนำหากติดหน้า Cloudflare)"
                     >
-                      <ExternalLink className="w-3 h-3" />
-                      เปิดเต็มจอในแท็บใหม่ ↗
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      เปิดดูเต็มจอในแท็บใหม่ ↗
                     </button>
                     <button
                       onClick={() => setSelectedProduct(null)}
@@ -4511,6 +4551,22 @@ function doPost(e) {
                   </div>
                 </div>
 
+                {/* Cloudflare Security Bypass Notice Banner */}
+                <div className="bg-gradient-to-r from-amber-550/15 via-amber-500/10 to-transparent border-b border-amber-500/25 px-4 py-2 flex items-center justify-between text-xs text-amber-200">
+                  <div className="flex items-center gap-2 overflow-hidden">
+                    <span className="text-base shrink-0">🛡️</span>
+                    <p className="text-[11px] font-sans">
+                      หากตัวเล่นติดหน้า <b>"Checking your browser"</b> (Cloudflare): ให้กดปุ่ม <b>"เปิดดูเต็มจอในแท็บใหม่"</b> ด้านบน เพื่อเล่นหนังทันที!
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => openSafeExternalUrl(selectedProduct.videoEmbedUrl)}
+                    className="shrink-0 ml-2 text-[10px] bg-amber-500/25 hover:bg-amber-500/40 text-amber-300 font-bold px-2.5 py-1 rounded border border-amber-500/40 cursor-pointer transition-all"
+                  >
+                    เปิดแท็บใหม่ทันที ↗
+                  </button>
+                </div>
+
                 {/* Embedded Video Player Iframe */}
                 <div className="w-full aspect-video bg-black relative">
                   <iframe
@@ -4518,6 +4574,8 @@ function doPost(e) {
                     title={selectedProduct.title}
                     className="w-full h-full border-0"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation allow-downloads"
+                    referrerPolicy="no-referrer-when-downgrade"
                     allowFullScreen
                     scrolling="no"
                   />
@@ -4646,7 +4704,7 @@ function doPost(e) {
 
                 {selectedProduct.videoEmbedUrl && (
                   <button
-                    onClick={() => window.open(selectedProduct.videoEmbedUrl, '_blank')}
+                    onClick={() => openSafeExternalUrl(selectedProduct.videoEmbedUrl)}
                     className="bg-gray-800 hover:bg-gray-700 text-amber-400 border border-amber-500/30 text-xs font-bold py-2.5 px-4 rounded-xl cursor-pointer flex items-center gap-1.5 shadow-sm transition-all"
                   >
                     <ExternalLink className="w-4 h-4" />
