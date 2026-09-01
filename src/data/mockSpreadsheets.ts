@@ -91,7 +91,7 @@ export const mockSpreadsheets: MockSpreadsheet[] = [
           '28400',
           '1.5 GB',
           'https://images.unsplash.com/photo-1574375927938-d5a98e8ffe85?auto=format&fit=crop&w=600&q=80',
-          '<iframe width="600" height="480" src="https://playmogo.com/e/iiwicjcoyz4" scrolling="no" frameborder="0" allowfullscreen="true"></iframe>',
+          '<iframe width="600" height="480" src="https://playmogo.com/e/iiwiccjcoyz4" scrolling="no" frameborder="0" allowfullscreen="true"></iframe>',
           '4.8'
         ],
         [

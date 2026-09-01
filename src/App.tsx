@@ -210,33 +210,72 @@ export const extractCleanUrl = (val: string): string => {
   if (!val) return '';
   let cleaned = extractUrlFromFormula(val).trim();
   
-  // If wrapped in HTML entities
-  if (cleaned.includes('&lt;') || cleaned.includes('&gt;')) {
+  // If wrapped in HTML entities, decode them completely
+  if (cleaned.includes('&lt;') || cleaned.includes('&gt;') || cleaned.includes('&quot;') || cleaned.includes('&#39;') || cleaned.includes('&amp;')) {
     cleaned = cleaned
       .replace(/&lt;/g, '<')
       .replace(/&gt;/g, '>')
       .replace(/&quot;/g, '"')
+      .replace(/&#34;/g, '"')
       .replace(/&#39;/g, "'")
+      .replace(/&apos;/g, "'")
       .replace(/&amp;/g, '&');
   }
 
-  // If it's an <iframe> tag or contains src=
+  // 1. If it's an <iframe> tag or contains src=
   if (cleaned.includes('<iframe') || cleaned.includes('src=')) {
-    const srcMatch = cleaned.match(/src=["']([^"']+)["']/i);
-    if (srcMatch && srcMatch[1]) {
-      return srcMatch[1].trim();
+    // Match src with double quotes, single quotes, escaped quotes, or unquoted
+    const srcMatch = cleaned.match(/src\s*=\s*(?:["'\\]+([^"'\\]+)["'\\]+|([^\s>]+))/i);
+    if (srcMatch) {
+      const extracted = (srcMatch[1] || srcMatch[2] || '').trim();
+      if (extracted && (extracted.startsWith('http://') || extracted.startsWith('https://') || extracted.startsWith('//'))) {
+        return extracted.startsWith('//') ? `https:${extracted}` : extracted;
+      }
     }
   }
 
-  // If it's an <a> tag
+  // 2. If it's an <a> tag
   if (cleaned.includes('<a') && cleaned.includes('href=')) {
-    const hrefMatch = cleaned.match(/href=["']([^"']+)["']/i);
-    if (hrefMatch && hrefMatch[1]) {
-      return hrefMatch[1].trim();
+    const hrefMatch = cleaned.match(/href\s*=\s*(?:["'\\]+([^"'\\]+)["'\\]+|([^\s>]+))/i);
+    if (hrefMatch) {
+      const extracted = (hrefMatch[1] || hrefMatch[2] || '').trim();
+      if (extracted && (extracted.startsWith('http://') || extracted.startsWith('https://') || extracted.startsWith('//'))) {
+        return extracted.startsWith('//') ? `https:${extracted}` : extracted;
+      }
     }
   }
 
-  return cleaned;
+  // 3. If it contains a direct absolute URL anywhere inside the string
+  if (cleaned.includes('http://') || cleaned.includes('https://')) {
+    const urlMatch = cleaned.match(/(https?:\/\/[^\s"'<>]+)/i);
+    if (urlMatch && urlMatch[1]) {
+      return urlMatch[1].trim();
+    }
+  }
+
+  // If it's a pure string without tags
+  if (!cleaned.includes('<') && !cleaned.includes('>')) {
+    return cleaned;
+  }
+
+  return '';
+};
+
+// Safe external URL opener that guarantees no HTML tag is ever opened as a relative browser path
+export const openSafeExternalUrl = (url?: string, fallbackMessage?: string): boolean => {
+  if (!url) {
+    if (fallbackMessage) alert(fallbackMessage);
+    return false;
+  }
+  const clean = extractCleanUrl(url);
+  if (clean && clean !== '#' && (clean.startsWith('http://') || clean.startsWith('https://'))) {
+    window.open(clean, '_blank', 'noopener,noreferrer');
+    return true;
+  }
+  if (fallbackMessage) {
+    alert(fallbackMessage);
+  }
+  return false;
 };
 
 // Help convert Google Drive downloadable links into automated trigger downloads
@@ -244,6 +283,8 @@ const convertDriveDownloadUrl = (url: string): string => {
   if (!url) return '#';
   const cleanUrl = extractCleanUrl(url);
   const trimmed = cleanUrl.trim();
+
+  if (!trimmed || trimmed === '#') return '#';
 
   // 1. Raw file ID
   if (/^[a-zA-Z0-9_-]{20,80}$/.test(trimmed)) {
@@ -262,7 +303,12 @@ const convertDriveDownloadUrl = (url: string): string => {
       return `https://docs.google.com/uc?export=download&id=${matches[1]}`;
     }
   }
-  return trimmed;
+
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return trimmed;
+  }
+
+  return '#';
 };
 
 // Comprehensive detector and builder for Video / Iframe embeds
@@ -284,19 +330,23 @@ export const extractVideoEmbedData = (
 
   let text = rawVal.trim();
   // Unescape common HTML entities if present
-  if (text.includes('&lt;') || text.includes('&gt;')) {
+  if (text.includes('&lt;') || text.includes('&gt;') || text.includes('&quot;') || text.includes('&#39;') || text.includes('&amp;')) {
     text = text
       .replace(/&lt;/g, '<')
       .replace(/&gt;/g, '>')
       .replace(/&quot;/g, '"')
+      .replace(/&#34;/g, '"')
       .replace(/&#39;/g, "'")
+      .replace(/&apos;/g, "'")
       .replace(/&amp;/g, '&');
   }
 
   // 1. Check if the cell contains an explicit <iframe tag
   if (text.includes('<iframe')) {
-    const srcMatch = text.match(/src=["']([^"']+)["']/i);
-    const extractedSrc = srcMatch && srcMatch[1] ? srcMatch[1].trim() : '';
+    const srcMatch = text.match(/src\s*=\s*(?:["'\\]+([^"'\\]+)["'\\]+|([^\s>]+))/i);
+    let extractedSrc = srcMatch ? (srcMatch[1] || srcMatch[2] || '').trim() : '';
+    if (extractedSrc.startsWith('//')) extractedSrc = `https:${extractedSrc}`;
+
     return {
       isVideo: true,
       videoEmbedUrl: extractedSrc,
@@ -307,7 +357,7 @@ export const extractVideoEmbedData = (
 
   // 2. Check if the value is a direct streaming URL or embed platform
   const cleanUrl = extractCleanUrl(text);
-  if (!cleanUrl) {
+  if (!cleanUrl || cleanUrl === '#') {
     return { isVideo: false, videoEmbedUrl: '', rawIframe: '', isIframeTag: false };
   }
 
@@ -507,25 +557,45 @@ function SafeHtmlContent({ htmlContent, className = '' }: SafeHtmlContentProps) 
 
   let trimmed = htmlContent.trim();
 
-  // If contains raw iframe tag or unescaped iframe code
-  if (trimmed.includes('<iframe') || trimmed.includes('&lt;iframe')) {
-    let unescaped = trimmed;
-    if (unescaped.includes('&lt;iframe')) {
-      unescaped = unescaped
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'");
-    }
-    const srcMatch = unescaped.match(/src=["']([^"']+)["']/i);
-    const srcUrl = srcMatch && srcMatch[1] ? srcMatch[1].trim() : '';
+  // If wrapped in HTML entities, decode them
+  let unescaped = trimmed;
+  if (unescaped.includes('&lt;') || unescaped.includes('&gt;') || unescaped.includes('&quot;') || unescaped.includes('&#39;')) {
+    unescaped = unescaped
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#34;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&apos;/g, "'")
+      .replace(/&amp;/g, '&');
+  }
 
-    if (srcUrl) {
-      return (
-        <div className={`w-full bg-black rounded-2xl overflow-hidden border border-gray-800 shadow-2xl relative my-2 ${className}`}>
+  // 1. Check if contains an iframe or video embed
+  const hasIframe = unescaped.includes('<iframe');
+  let iframeSrc = '';
+  let contentWithoutIframe = unescaped;
+
+  if (hasIframe) {
+    const srcMatch = unescaped.match(/src\s*=\s*(?:["'\\]+([^"'\\]+)["'\\]+|([^\s>]+))/i);
+    if (srcMatch) {
+      iframeSrc = (srcMatch[1] || srcMatch[2] || '').trim();
+      if (iframeSrc.startsWith('//')) iframeSrc = `https:${iframeSrc}`;
+    }
+    // Remove the iframe tag from the remaining text
+    contentWithoutIframe = unescaped.replace(/<iframe[\s\S]*?<\/iframe>/gi, '').replace(/<iframe[^>]*\/?>/gi, '').trim();
+  }
+
+  const isFullHtml = /<!DOCTYPE|<html>|<head>|<body>/i.test(contentWithoutIframe || unescaped);
+  const hasTags = /<[a-z][\s\S]*>/i.test(contentWithoutIframe);
+
+  return (
+    <div className={`space-y-4 ${className}`}>
+      {/* Video Player if iframe is present */}
+      {iframeSrc && (
+        <div className="w-full bg-black rounded-2xl overflow-hidden border border-gray-800 shadow-2xl relative my-2">
           <div className="aspect-video w-full bg-black">
             <iframe
-              src={srcUrl}
+              src={iframeSrc}
               title="Embedded Video Player"
               className="w-full h-full border-0"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
@@ -533,58 +603,52 @@ function SafeHtmlContent({ htmlContent, className = '' }: SafeHtmlContentProps) 
               scrolling="no"
             />
           </div>
-          <div className="bg-[#0e1424] px-4 py-2 border-t border-gray-800 flex items-center justify-between text-xs text-gray-300">
+          <div className="bg-[#0e1424] px-4 py-2.5 border-t border-gray-800 flex items-center justify-between text-xs text-gray-300">
             <span className="flex items-center gap-1.5 text-amber-400 font-semibold text-[11px]">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              ตัวเล่นภาพยนตร์ (Embedded Player)
+              ตัวเล่นภาพยนตร์ออนไลน์ (Online Cinema Player)
             </span>
             <button
-              onClick={() => window.open(srcUrl, '_blank')}
+              onClick={() => openSafeExternalUrl(iframeSrc)}
               className="text-gray-400 hover:text-white flex items-center gap-1 text-[11px] underline underline-offset-2 transition-colors cursor-pointer"
             >
               เปิดเต็มจอในแท็บใหม่ ↗
             </button>
           </div>
         </div>
-      );
-    }
-  }
+      )}
 
-  const isFullHtml = /<!DOCTYPE|<html>|<head>|<body>/i.test(trimmed);
-  const hasTags = /<[a-z][\s\S]*>/i.test(trimmed);
-
-  if (isFullHtml) {
-    return (
-      <div className="w-full bg-[#070b13] rounded-2xl border border-gray-850 overflow-hidden shadow-inner flex flex-col">
-        <div className="flex items-center justify-between px-4 py-2 bg-[#0b101c] border-b border-gray-850 select-none">
-          <span className="text-[10px] text-gray-400 flex items-center gap-1.5 font-sans">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            พรีวิวเนื้อหาเว็บบอร์ด (Isolated Frame Container)
-          </span>
+      {/* Accompanying HTML Description */}
+      {contentWithoutIframe && isFullHtml && (
+        <div className="w-full bg-[#070b13] rounded-2xl border border-gray-850 overflow-hidden shadow-inner flex flex-col">
+          <div className="flex items-center justify-between px-4 py-2 bg-[#0b101c] border-b border-gray-850 select-none">
+            <span className="text-[10px] text-gray-400 flex items-center gap-1.5 font-sans">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              เนื้อหารายละเอียดภาพยนตร์ (Detailed Info)
+            </span>
+          </div>
+          <iframe
+            srcDoc={contentWithoutIframe}
+            title="Isolated HTML View"
+            className="w-full min-h-[400px] border-none bg-white"
+            sandbox="allow-scripts allow-popups"
+          />
         </div>
-        <iframe
-          srcDoc={trimmed}
-          title="Isolated HTML View"
-          className="w-full min-h-[500px] border-none bg-white"
-          sandbox="allow-scripts allow-popups"
+      )}
+
+      {contentWithoutIframe && !isFullHtml && hasTags && (
+        <div 
+          className="text-xs sm:text-sm text-gray-300 leading-relaxed font-sans font-light bg-[#070b13] p-4 rounded-2xl border border-gray-850 shadow-inner html-content-container overflow-x-auto"
+          dangerouslySetInnerHTML={{ __html: contentWithoutIframe }}
         />
-      </div>
-    );
-  }
+      )}
 
-  if (hasTags) {
-    return (
-      <div 
-        className={`text-xs sm:text-sm text-gray-300 leading-relaxed font-sans font-light bg-[#070b13] p-4 rounded-2xl border border-gray-850 shadow-inner html-content-container overflow-x-auto ${className}`}
-        dangerouslySetInnerHTML={{ __html: trimmed }}
-      />
-    );
-  }
-
-  return (
-    <p className={`text-xs sm:text-sm text-gray-200 leading-relaxed font-sans font-light bg-[#070b13] p-3.5 rounded-2xl border border-gray-850 shadow-inner whitespace-pre-line ${className}`}>
-      {trimmed}
-    </p>
+      {contentWithoutIframe && !isFullHtml && !hasTags && (
+        <p className="text-xs sm:text-sm text-gray-200 leading-relaxed font-sans font-light bg-[#070b13] p-3.5 rounded-2xl border border-gray-850 shadow-inner whitespace-pre-line">
+          {contentWithoutIframe}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -2178,30 +2242,48 @@ export default function App() {
       const extractedSubcat = subCatIdx !== -1 ? getCell(row, subCatIdx, -1, '') : '';
 
       const imageUrl = convertDriveImageUrl(rawImageUrl);
-      const downloadUrl = convertDriveDownloadUrl(rawDownloadUrl);
+      let downloadUrl = convertDriveDownloadUrl(rawDownloadUrl);
 
       // ตรวจสอบและดึงข้อมูล Video Embed / Iframe สำหรับดูหนังออนไลน์ผ่านเว็บโดยตรง
       let videoData = extractVideoEmbedData(rawVideo, category, extractedType);
       if (!videoData.isVideo && rawDownloadUrl) {
         videoData = extractVideoEmbedData(rawDownloadUrl, category, extractedType);
       }
-      if (!videoData.isVideo && detailedDescription && (detailedDescription.includes('<iframe') || detailedDescription.includes('playmogo.com'))) {
+      if (!videoData.isVideo && downloadUrl && downloadUrl !== '#') {
+        videoData = extractVideoEmbedData(downloadUrl, category, extractedType);
+      }
+      if (!videoData.isVideo && detailedDescription && (detailedDescription.includes('<iframe') || detailedDescription.includes('playmogo.com') || detailedDescription.includes('&lt;iframe'))) {
         videoData = extractVideoEmbedData(detailedDescription, category, extractedType);
       }
-      if (!videoData.isVideo && description && (description.includes('<iframe') || description.includes('playmogo.com'))) {
+      if (!videoData.isVideo && description && (description.includes('<iframe') || description.includes('playmogo.com') || description.includes('&lt;iframe'))) {
         videoData = extractVideoEmbedData(description, category, extractedType);
+      }
+      if (!videoData.isVideo && rawImageUrl && (rawImageUrl.includes('<iframe') || rawImageUrl.includes('playmogo.com'))) {
+        videoData = extractVideoEmbedData(rawImageUrl, category, extractedType);
       }
 
       const isVideo = videoData.isVideo || 
                       category.includes('ดูหนัง') || 
                       category.includes('หนัง') || 
                       category.includes('movie') || 
+                      category.includes('cinema') || 
+                      category.includes('series') || 
                       extractedType.includes('movie') || 
                       extractedType.includes('หนัง');
 
-      let finalVideoEmbedUrl = videoData.videoEmbedUrl;
+      let finalVideoEmbedUrl = videoData.videoEmbedUrl ? extractCleanUrl(videoData.videoEmbedUrl) : '';
       if (!finalVideoEmbedUrl && isVideo && downloadUrl && downloadUrl !== '#' && (downloadUrl.startsWith('http://') || downloadUrl.startsWith('https://'))) {
         finalVideoEmbedUrl = downloadUrl;
+      }
+
+      // If downloadUrl was missing or is an iframe, but we have finalVideoEmbedUrl, provide it as direct link
+      if ((!downloadUrl || downloadUrl === '#' || downloadUrl.includes('<')) && finalVideoEmbedUrl) {
+        downloadUrl = finalVideoEmbedUrl;
+      }
+
+      // Double-check downloadUrl is never raw HTML
+      if (downloadUrl.includes('<') || downloadUrl.includes('>')) {
+        downloadUrl = extractCleanUrl(downloadUrl) || '#';
       }
 
       // ตรวจสอบและแปลงโค้ด HTML Image จาก Google Sheet โดยตรงตามที่ผู้ใช้ต้องการ
