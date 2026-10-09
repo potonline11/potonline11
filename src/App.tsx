@@ -36,6 +36,9 @@ import {
   Database,
   CheckCircle2,
   ChevronRight,
+  ChevronLeft,
+  ChevronsLeft,
+  ChevronsRight,
   LogOut,
   RefreshCw,
   Copy,
@@ -1097,7 +1100,21 @@ export default function App() {
   const [localSpreadsheets, setLocalSpreadsheets] = useState(() => {
     try {
       const saved = localStorage.getItem('hubfree_sandbox_spreadsheets');
-      return saved ? JSON.parse(saved) : mockSpreadsheets;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const defaultMock = mockSpreadsheets.find(s => s.id === 'hubfree-products-database');
+        const savedDefault = parsed.find((s: any) => s.id === 'hubfree-products-database');
+        if (defaultMock && savedDefault) {
+          const savedRowsCount = savedDefault.sheets?.['All Products']?.length || 0;
+          const mockRowsCount = defaultMock.sheets?.['All Products']?.length || 0;
+          if (savedRowsCount < mockRowsCount) {
+            savedDefault.sheets['All Products'] = defaultMock.sheets['All Products'];
+            localStorage.setItem('hubfree_sandbox_spreadsheets', JSON.stringify(parsed));
+          }
+        }
+        return parsed;
+      }
+      return mockSpreadsheets;
     } catch {
       return mockSpreadsheets;
     }
@@ -1159,6 +1176,23 @@ export default function App() {
   const [selectedSoftwareSubcat, setSelectedSoftwareSubcat] = useState<string>('All');
   const [selectedForexSubcat, setSelectedForexSubcat] = useState<string>('All');
   const [selectedMovieSubcat, setSelectedMovieSubcat] = useState<string>('All');
+
+  // Customer Pagination State: 20, 50, 100 items per page with arrow navigation
+  const [itemsPerPage, setItemsPerPage] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('hubfree_items_per_page');
+      const num = saved ? Number(saved) : 20;
+      return [20, 50, 100].includes(num) ? num : 20;
+    } catch {
+      return 20;
+    }
+  });
+  const [currentPage, setCurrentPage] = useState<number>(1);
+
+  // Reset pagination to page 1 whenever user changes tab, search query, or sub-categories
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, searchQuery, selectedSoftwareSubcat, selectedForexSubcat, selectedMovieSubcat]);
 
   // New product input state (for DB cell appender)
   const [showAddForm, setShowAddForm] = useState(false);
@@ -2711,18 +2745,92 @@ export default function App() {
     return counts;
   }, [products]);
 
-  // High-performance featured product picker
-  const featuredProduct = useMemo(() => {
-    if (filteredProducts.length === 0) return null;
-    // Choose the first one in the list as the premium card
-    return filteredProducts[0];
-  }, [filteredProducts]);
+  // Customer Pagination Calculation (Max 100 items per page with choices 20 / 50 / 100)
+  const totalCatalogItems = filteredProducts.length;
+  const totalPages = Math.max(1, Math.ceil(totalCatalogItems / itemsPerPage));
 
-  // Remaining list products (excluding currently featured product)
+  // Auto-clamp currentPage if it exceeds totalPages
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
+  const handleItemsPerPageChange = (size: number) => {
+    setItemsPerPage(size);
+    setCurrentPage(1);
+    try {
+      localStorage.setItem('hubfree_items_per_page', String(size));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage < 1 || newPage > totalPages || newPage === currentPage) return;
+    setCurrentPage(newPage);
+    setTimeout(() => {
+      const el = document.getElementById('catalog-products-top') || document.getElementById('catalog-view');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 50);
+  };
+
+  const paginationInfo = useMemo(() => {
+    if (totalCatalogItems === 0) {
+      return { startItem: 0, endItem: 0, totalPages: 1 };
+    }
+    const startItem = (currentPage - 1) * itemsPerPage + 1;
+    const endItem = Math.min(currentPage * itemsPerPage, totalCatalogItems);
+    return { startItem, endItem, totalPages };
+  }, [totalCatalogItems, currentPage, itemsPerPage, totalPages]);
+
+  // Page pills generator with ellipsis for smooth jumping
+  const visiblePagePills = useMemo(() => {
+    const total = totalPages;
+    if (total <= 7) {
+      return Array.from({ length: total }, (_, i) => i + 1);
+    }
+    const pills: (number | string)[] = [];
+    if (currentPage <= 4) {
+      for (let i = 1; i <= 5; i++) pills.push(i);
+      pills.push('...');
+      pills.push(total);
+    } else if (currentPage >= total - 3) {
+      pills.push(1);
+      pills.push('...');
+      for (let i = total - 4; i <= total; i++) pills.push(i);
+    } else {
+      pills.push(1);
+      pills.push('...');
+      pills.push(currentPage - 1);
+      pills.push(currentPage);
+      pills.push(currentPage + 1);
+      pills.push('...');
+      pills.push(total);
+    }
+    return pills;
+  }, [totalPages, currentPage]);
+
+  // High-performance featured product picker (Shown on page 1 only)
+  const featuredProduct = useMemo(() => {
+    if (currentPage !== 1 || filteredProducts.length === 0) return null;
+    return filteredProducts[0];
+  }, [filteredProducts, currentPage]);
+
+  // Remaining list products for the current page view
   const gridProducts = useMemo(() => {
-    if (filteredProducts.length <= 1) return filteredProducts;
-    return filteredProducts.slice(1);
-  }, [filteredProducts]);
+    if (filteredProducts.length === 0) return [];
+    if (currentPage === 1) {
+      // On page 1: item 0 is presented in the top Hero Spotlight; remaining items for page 1 appear in grid
+      return filteredProducts.slice(1, itemsPerPage);
+    }
+    // On subsequent pages: all items for that page appear directly in grid
+    const startIdx = (currentPage - 1) * itemsPerPage;
+    const endIdx = startIdx + itemsPerPage;
+    return filteredProducts.slice(startIdx, endIdx);
+  }, [filteredProducts, currentPage, itemsPerPage]);
 
   // Function to simulate dynamic visual click/download triggers with success prompts
   const triggerDownloadAction = (product: HubItem) => {
@@ -3432,130 +3540,339 @@ export default function App() {
               </div>
             )}
 
-            {/* Grid Products (Remaining cards catalog list) */}
-            {gridProducts.length > 0 && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-bold uppercase tracking-wider text-gray-400">
-                    รายการดาวน์โหลดทั้งหมด ({filteredProducts.length})
-                  </h4>
-                  <div className="h-0.5 bg-gray-800 flex-1 ml-4" />
+            {/* Catalog Grid Section with Top & Bottom Pagination Controls */}
+            {totalCatalogItems > 0 && (
+              <div className="space-y-6" id="catalog-products-section">
+                
+                {/* Scroll Target Anchor */}
+                <div id="catalog-products-top" className="scroll-mt-24" />
+
+                {/* Top Pagination & Controls Bar */}
+                <div className="bg-[#0b101c] p-3.5 sm:p-4 rounded-2xl border border-gray-800 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  
+                  {/* Left: Summary Title & Range */}
+                  <div className="flex items-center gap-3">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="text-sm font-extrabold text-white tracking-wide font-sans">
+                          รายการดาวน์โหลดทั้งหมด
+                        </h4>
+                        <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[11px] font-bold px-2 py-0.5 rounded-md font-mono">
+                          {totalCatalogItems} รายการ
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-gray-400 mt-0.5 font-sans">
+                        กำลังแสดงลำดับที่ <strong className="text-amber-400 font-mono">{paginationInfo.startItem} - {paginationInfo.endItem}</strong> (หน้า {currentPage}/{paginationInfo.totalPages})
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Right: Per-Page Selector (20 / 50 / 100) & Quick Navigation Arrows */}
+                  <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 justify-between sm:justify-end">
+                    
+                    {/* 20 / 50 / 100 Per-page Toggle */}
+                    <div className="flex items-center gap-1 bg-gray-950 p-1 rounded-xl border border-gray-800">
+                      <span className="text-[11px] text-gray-400 px-2 font-medium select-none">
+                        ต่อหน้า:
+                      </span>
+                      {[20, 50, 100].map((size) => (
+                        <button
+                          key={size}
+                          type="button"
+                          onClick={() => handleItemsPerPageChange(size)}
+                          className={`px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                            itemsPerPage === size
+                              ? 'bg-amber-500 text-black shadow-md shadow-amber-500/20 font-black'
+                              : 'text-gray-400 hover:text-white hover:bg-gray-900'
+                          }`}
+                          title={`แสดง ${size} ตัวต่อหน้า`}
+                        >
+                          {size}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Quick Arrows for immediate page flipping */}
+                    <div className="flex items-center gap-1 bg-gray-950 p-1 rounded-xl border border-gray-800">
+                      <button
+                        type="button"
+                        onClick={() => handlePageChange(currentPage - 1)}
+                        disabled={currentPage <= 1}
+                        className="p-1.5 rounded-lg text-gray-300 hover:text-white hover:bg-gray-900 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
+                        title="หน้าก่อนหน้า"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </button>
+                      <span className="text-xs font-bold px-2 text-gray-300 font-mono select-none">
+                        {currentPage}/{paginationInfo.totalPages}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handlePageChange(currentPage + 1)}
+                        disabled={currentPage >= paginationInfo.totalPages}
+                        className="p-1.5 rounded-lg text-gray-300 hover:text-white hover:bg-gray-900 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
+                        title="หน้าถัดไป"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {gridProducts.map((p, index) => (
-                    <div
-                      key={p.id || index}
-                      className="bg-[#0b101c] rounded-2xl overflow-hidden border border-gray-800 hover:border-amber-500/40 shadow-xl transition-all hover:-translate-y-1 duration-300 flex flex-col justify-between group"
-                    >
-                      {/* Image cover header with badges overlay */}
-                      <div className="relative h-44 bg-gray-950 overflow-hidden select-none">
-                        {p.isHtmlImage && p.htmlImage ? (
-                          <div 
-                            className="w-full h-full [&>img]:w-full [&>img]:h-full [&>img]:object-cover group-hover:scale-110 transition-all duration-500 opacity-80"
-                            dangerouslySetInnerHTML={{ __html: p.htmlImage }}
-                          />
-                        ) : (
-                          <img
-                            src={p.imageUrl || null}
-                            alt={p.title}
-                            className="w-full h-full object-cover group-hover:scale-110 transition-all duration-500 opacity-80"
-                            referrerPolicy="no-referrer"
-                            data-original-drive-id={getGoogleDriveId(p.imageUrl || '') || undefined}
-                            onError={handleImageError}
-                          />
-                        )}
-                        <div className="absolute inset-0 bg-gradient-to-t from-[#0b101c] via-[#0b101c]/40 to-transparent" />
-                        
-                        {/* Tags */}
-                        <div className="absolute top-3 left-3 flex flex-col gap-1.5 items-start">
-                          <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[9px] px-2.5 py-0.5 rounded-md font-bold uppercase backdrop-blur-sm">
-                            {p.category}
-                          </span>
+                {/* Grid Products Cards */}
+                {gridProducts.length > 0 && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {gridProducts.map((p, index) => (
+                      <div
+                        key={p.id || index}
+                        className="bg-[#0b101c] rounded-2xl overflow-hidden border border-gray-800 hover:border-amber-500/40 shadow-xl transition-all hover:-translate-y-1 duration-300 flex flex-col justify-between group"
+                      >
+                        {/* Image cover header with badges overlay */}
+                        <div className="relative h-44 bg-gray-950 overflow-hidden select-none">
+                          {p.isHtmlImage && p.htmlImage ? (
+                            <div 
+                              className="w-full h-full [&>img]:w-full [&>img]:h-full [&>img]:object-cover group-hover:scale-110 transition-all duration-500 opacity-80"
+                              dangerouslySetInnerHTML={{ __html: p.htmlImage }}
+                            />
+                          ) : (
+                            <img
+                              src={p.imageUrl || null}
+                              alt={p.title}
+                              className="w-full h-full object-cover group-hover:scale-110 transition-all duration-500 opacity-80"
+                              referrerPolicy="no-referrer"
+                              data-original-drive-id={getGoogleDriveId(p.imageUrl || '') || undefined}
+                              onError={handleImageError}
+                            />
+                          )}
+                          <div className="absolute inset-0 bg-gradient-to-t from-[#0b101c] via-[#0b101c]/40 to-transparent" />
+                          
+                          {/* Tags */}
+                          <div className="absolute top-3 left-3 flex flex-col gap-1.5 items-start">
+                            <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[9px] px-2.5 py-0.5 rounded-md font-bold uppercase backdrop-blur-sm">
+                              {p.category}
+                            </span>
+                          </div>
+
+                          {/* Rating Overly */}
+                          <div className="absolute top-3 right-3 bg-black/80 backdrop-blur-sm border border-amber-500/20 text-[10px] font-bold px-2 py-1 rounded text-white flex items-center gap-1 shadow-lg font-mono">
+                            <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
+                            {p.rating}
+                          </div>
                         </div>
 
-                        {/* Rating Overly */}
-                        <div className="absolute top-3 right-3 bg-black/80 backdrop-blur-sm border border-amber-500/20 text-[10px] font-bold px-2 py-1 rounded text-white flex items-center gap-1 shadow-lg font-mono">
-                          <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
-                          {p.rating}
+                        {/* Card Content parameters */}
+                        <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
+                          <div className="space-y-2">
+                            <h4 className="text-base font-bold text-white group-hover:text-amber-400 transition-colors line-clamp-1 font-sans">
+                              {p.title}
+                            </h4>
+                            <p className="text-xs text-gray-400 line-clamp-2 leading-relaxed">
+                              {getCleanPreviewText(p.description)}
+                            </p>
+                          </div>
+
+                          {/* File metrics metadata bar */}
+                          <div className="bg-[#070b13] p-3 rounded-xl border border-gray-850 grid grid-cols-3 gap-1.5 text-center text-[11px] font-medium text-gray-300">
+                            <div className="space-y-0.5">
+                              <span className="text-[9px] text-gray-500 uppercase block select-none">ยอดโหลด</span>
+                              <span className="text-emerald-400 font-bold block">{Number(p.downloads).toLocaleString() || p.downloads}</span>
+                            </div>
+                            <div className="space-y-0.5 border-x border-gray-800">
+                              <span className="text-[9px] text-gray-500 uppercase block select-none">ยอดดู</span>
+                              <span className="text-amber-400 font-bold block">{Number(p.views).toLocaleString() || p.views}</span>
+                            </div>
+                            <div className="space-y-0.5">
+                              <span className="text-[9px] text-gray-500 uppercase block select-none">ขนาดไฟล์</span>
+                              <span className="text-indigo-400 font-bold block truncate">{p.fileSize}</span>
+                            </div>
+                          </div>
+
+                          {/* Detailed action buttons */}
+                          <div className="pt-2 grid grid-cols-2 gap-2">
+                            <button
+                              onClick={() => setSelectedProduct(p)}
+                              className="bg-gray-900 border border-gray-800 hover:bg-gray-850 text-gray-200 text-xs font-semibold py-2 px-3 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1"
+                            >
+                              <HelpCircle className="w-3.5 h-3.5 text-gray-400" />
+                              {p.isVideo || activeTab === 'Movies' ? 'ข้อมูลภาพยนตร์' : 'รีวิวละเอียด'}
+                            </button>
+                            <button
+                              onClick={() => triggerDownloadAction(p)}
+                              className={`text-xs font-bold py-2 px-3 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 transform active:scale-95 border-none ${
+                                unlockedProductIds.includes(p.id)
+                                  ? 'bg-emerald-500 hover:bg-emerald-600 text-black shadow-md shadow-emerald-500/10'
+                                  : 'bg-amber-500 hover:bg-amber-600 text-black shadow-md shadow-amber-500/10'
+                              }`}
+                            >
+                              {p.isVideo || activeTab === 'Movies' ? (
+                                unlockedProductIds.includes(p.id) ? (
+                                  <>
+                                    <Play className="w-3.5 h-3.5 text-black fill-black" />
+                                    ดูหนังออนไลน์
+                                  </>
+                                ) : (
+                                  <>
+                                    <Lock className="w-3.5 h-3.5 text-black" />
+                                    ปลดล็อกดูหนัง
+                                  </>
+                                )
+                              ) : (
+                                unlockedProductIds.includes(p.id) ? (
+                                  <>
+                                    <Download className="w-3.5 h-3.5 text-black" />
+                                    ดาวน์โหลด
+                                  </>
+                                ) : (
+                                  <>
+                                    <Lock className="w-3.5 h-3.5 text-black" />
+                                    ปลดล็อกโหลด
+                                  </>
+                                )
+                              )}
+                            </button>
+                          </div>
                         </div>
                       </div>
+                    ))}
+                  </div>
+                )}
 
-                      {/* Card Content parameters */}
-                      <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
-                        <div className="space-y-2">
-                          <h4 className="text-base font-bold text-white group-hover:text-amber-400 transition-colors line-clamp-1 font-sans">
-                            {p.title}
-                          </h4>
-                          <p className="text-xs text-gray-400 line-clamp-2 leading-relaxed">
-                            {getCleanPreviewText(p.description)}
-                          </p>
-                        </div>
+                {/* Bottom Full Pagination Navigator */}
+                <div className="bg-[#0b101c] p-4 sm:p-5 rounded-2xl border border-gray-800 shadow-2xl flex flex-col md:flex-row items-center justify-between gap-4 select-none">
+                  
+                  {/* Page Summary */}
+                  <div className="text-xs text-gray-400 text-center sm:text-left font-sans">
+                    แสดงหน้า <span className="font-bold text-amber-400 font-mono">{currentPage}</span> จากทั้งหมด <span className="font-bold text-white font-mono">{paginationInfo.totalPages}</span> หน้า (รวม <span className="font-bold text-amber-400 font-mono">{totalCatalogItems}</span> รายการ)
+                  </div>
 
-                        {/* File metrics metadata bar */}
-                        <div className="bg-[#070b13] p-3 rounded-xl border border-gray-850 grid grid-cols-3 gap-1.5 text-center text-[11px] font-medium text-gray-300">
-                          <div className="space-y-0.5">
-                            <span className="text-[9px] text-gray-500 uppercase block select-none">ยอดโหลด</span>
-                            <span className="text-emerald-400 font-bold block">{Number(p.downloads).toLocaleString() || p.downloads}</span>
-                          </div>
-                          <div className="space-y-0.5 border-x border-gray-800">
-                            <span className="text-[9px] text-gray-500 uppercase block select-none">ยอดดู</span>
-                            <span className="text-amber-400 font-bold block">{Number(p.views).toLocaleString() || p.views}</span>
-                          </div>
-                          <div className="space-y-0.5">
-                            <span className="text-[9px] text-gray-500 uppercase block select-none">ขนาดไฟล์</span>
-                            <span className="text-indigo-400 font-bold block truncate">{p.fileSize}</span>
-                          </div>
-                        </div>
+                  {/* Primary Navigation Controls with Arrows & Number Pills */}
+                  <div className="flex flex-wrap items-center justify-center gap-1.5 max-w-full">
+                    {/* First Page button */}
+                    <button
+                      type="button"
+                      onClick={() => handlePageChange(1)}
+                      disabled={currentPage <= 1}
+                      className="flex items-center gap-1 px-2.5 py-2 rounded-xl text-xs font-semibold bg-gray-950 border border-gray-850 text-gray-300 hover:text-white hover:bg-gray-900 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
+                      title="ไปหน้าแรกสุด"
+                    >
+                      <ChevronsLeft className="w-4 h-4" />
+                      <span className="hidden sm:inline">หน้าแรก</span>
+                    </button>
 
-                        {/* Detailed action buttons */}
-                        <div className="pt-2 grid grid-cols-2 gap-2">
+                    {/* Previous Page arrow button */}
+                    <button
+                      type="button"
+                      onClick={() => handlePageChange(currentPage - 1)}
+                      disabled={currentPage <= 1}
+                      className="flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold bg-gray-950 border border-gray-850 text-amber-400 hover:bg-gray-900 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
+                      title="หน้าก่อนหน้า"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                      <span>ก่อนหน้า</span>
+                    </button>
+
+                    {/* Page Numbers */}
+                    <div className="flex items-center gap-1 overflow-x-auto max-w-full py-1">
+                      {visiblePagePills.map((pill, idx) => {
+                        if (pill === '...') {
+                          return (
+                            <span key={`dots-${idx}`} className="px-2 py-1 text-gray-500 font-mono text-xs select-none">
+                              •••
+                            </span>
+                          );
+                        }
+                        const pageNum = Number(pill);
+                        const isActive = pageNum === currentPage;
+                        return (
                           <button
-                            onClick={() => setSelectedProduct(p)}
-                            className="bg-gray-900 border border-gray-800 hover:bg-gray-850 text-gray-200 text-xs font-semibold py-2 px-3 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1"
-                          >
-                            <HelpCircle className="w-3.5 h-3.5 text-gray-400" />
-                            {p.isVideo || activeTab === 'Movies' ? 'ข้อมูลภาพยนตร์' : 'รีวิวละเอียด'}
-                          </button>
-                          <button
-                            onClick={() => triggerDownloadAction(p)}
-                            className={`text-xs font-bold py-2 px-3 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 transform active:scale-95 border-none ${
-                              unlockedProductIds.includes(p.id)
-                                ? 'bg-emerald-500 hover:bg-emerald-600 text-black shadow-md shadow-emerald-500/10'
-                                : 'bg-amber-500 hover:bg-amber-600 text-black shadow-md shadow-amber-500/10'
+                            key={`page-${pageNum}`}
+                            type="button"
+                            onClick={() => handlePageChange(pageNum)}
+                            className={`min-w-[36px] h-9 px-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                              isActive
+                                ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/25 ring-2 ring-amber-400 font-black'
+                                : 'bg-gray-950 border border-gray-800 text-gray-300 hover:text-white hover:bg-gray-900 hover:border-gray-700'
                             }`}
                           >
-                            {p.isVideo || activeTab === 'Movies' ? (
-                              unlockedProductIds.includes(p.id) ? (
-                                <>
-                                  <Play className="w-3.5 h-3.5 text-black fill-black" />
-                                  ดูหนังออนไลน์
-                                </>
-                              ) : (
-                                <>
-                                  <Lock className="w-3.5 h-3.5 text-black" />
-                                  ปลดล็อกดูหนัง
-                                </>
-                              )
-                            ) : (
-                              unlockedProductIds.includes(p.id) ? (
-                                <>
-                                  <Download className="w-3.5 h-3.5 text-black" />
-                                  ดาวน์โหลด
-                                </>
-                              ) : (
-                                <>
-                                  <Lock className="w-3.5 h-3.5 text-black" />
-                                  ปลดล็อกโหลด
-                                </>
-                              )
-                            )}
+                            {pageNum}
                           </button>
-                        </div>
-                      </div>
+                        );
+                      })}
                     </div>
-                  ))}
+
+                    {/* Next Page arrow button */}
+                    <button
+                      type="button"
+                      onClick={() => handlePageChange(currentPage + 1)}
+                      disabled={currentPage >= paginationInfo.totalPages}
+                      className="flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-black font-black shadow-md shadow-amber-500/10 disabled:opacity-30 disabled:cursor-not-allowed disabled:bg-gray-950 disabled:text-gray-500 transition-all cursor-pointer"
+                      title="หน้าถัดไป"
+                    >
+                      <span>ถัดไป</span>
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+
+                    {/* Last Page button */}
+                    <button
+                      type="button"
+                      onClick={() => handlePageChange(paginationInfo.totalPages)}
+                      disabled={currentPage >= paginationInfo.totalPages}
+                      className="flex items-center gap-1 px-2.5 py-2 rounded-xl text-xs font-semibold bg-gray-950 border border-gray-850 text-gray-300 hover:text-white hover:bg-gray-900 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
+                      title="ไปหน้าสุดท้าย"
+                    >
+                      <span className="hidden sm:inline">หน้าสุดท้าย</span>
+                      <ChevronsRight className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Items Per Page Selector (Bottom) & Jump to Page */}
+                  <div className="flex items-center gap-3 flex-wrap justify-center sm:justify-end">
+                    
+                    {/* Jump to page dropdown if more than 3 pages */}
+                    {paginationInfo.totalPages > 3 && (
+                      <div className="flex items-center gap-1.5 text-xs text-gray-400 bg-gray-950 px-2 py-1.5 rounded-xl border border-gray-800">
+                        <span className="text-[11px]">ไปที่หน้า:</span>
+                        <select
+                          value={currentPage}
+                          onChange={(e) => handlePageChange(Number(e.target.value))}
+                          className="bg-transparent text-amber-400 font-bold font-mono outline-none cursor-pointer text-xs"
+                        >
+                          {Array.from({ length: paginationInfo.totalPages }, (_, i) => i + 1).map((num) => (
+                            <option key={num} value={num} className="bg-gray-900 text-white">
+                              {num}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* Per-Page selector */}
+                    <div className="flex items-center gap-1.5 bg-gray-950 p-1 rounded-xl border border-gray-800">
+                      <span className="text-[11px] text-gray-400 pl-2 pr-1 font-medium select-none">
+                        ต่อหน้า:
+                      </span>
+                      {[20, 50, 100].map((size) => (
+                        <button
+                          key={size}
+                          type="button"
+                          onClick={() => handleItemsPerPageChange(size)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                            itemsPerPage === size
+                              ? 'bg-amber-500 text-black font-black shadow-md shadow-amber-500/20'
+                              : 'text-gray-400 hover:text-white hover:bg-gray-900'
+                          }`}
+                        >
+                          {size}
+                        </button>
+                      ))}
+                    </div>
+
+                  </div>
+
                 </div>
+
               </div>
             )}
 
